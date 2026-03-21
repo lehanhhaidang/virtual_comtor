@@ -1,0 +1,31 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build output
+.next
+out
+dist
+build
+
+# Data volumes
+Vcomtor/
+
+# Dev & IDE
+.env
+.git
+.gitignore
+*.md
+.vscode
+.idea
+
+# Tests
+tests/
+**/__tests__/
+coverage/
+vitest.config.ts
+
+# OS
+.DS_Store
+Thumbs.db

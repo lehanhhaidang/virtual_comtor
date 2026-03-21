@@ -1,0 +1,44 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./Vcomtor/storage:/app/Vcomtor/storage
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/virtual_comtor
+    env_file:
+      - .env
+    depends_on:
+      mongodb:
+        condition: service_started
+    restart: unless-stopped
+    networks: [internal, external]
+
+  mongodb:
+    image: mongo:7
+    # No ports exposed to host — accessible only via internal network
+    volumes:
+      - ./Vcomtor/mongodb:/data/db
+    restart: unless-stopped
+    networks: [internal]
+
+  mongo-express:
+    image: mongo-express:latest
+    ports:
+      - '127.0.0.1:8081:8081'  # localhost only
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://mongodb:27017/
+      - ME_CONFIG_BASICAUTH=false
+    depends_on:
+      mongodb:
+        condition: service_started
+    restart: unless-stopped
+    networks: [internal]
+
+networks:
+  internal:
+    internal: true
+  external: {}
