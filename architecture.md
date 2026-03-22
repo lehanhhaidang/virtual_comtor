@@ -8,17 +8,20 @@ graph TB
         UI["React UI<br/>(ShadCN + Dark Theme)"]
         SDK["Soniox Web SDK"]
         REC["MediaRecorder API"]
+        E2EE["Web Crypto API<br/>(E2EE encryption)"]
     end
 
     subgraph "Next.js Server"
-        ROUTE["API Routes / Server Actions"]
+        PROXY["Proxy (Auth Guard)"]
+        ROUTE["API Routes"]
         SVC["Services (Business Logic)"]
         REPO["Repositories (Data Access)"]
     end
 
     subgraph "External APIs"
         SONIOX["Soniox Cloud<br/>(WebSocket STT)"]
-        ELEVEN["ElevenLabs<br/>(TTS - Phase 2)"]
+        OPENAI["OpenAI GPT-4o-mini<br/>(Meeting Summary)"]
+        ELEVEN["ElevenLabs<br/>(TTS - Future)"]
     end
 
     subgraph "Infrastructure"
@@ -26,13 +29,16 @@ graph TB
         FS["File System<br/>(Vcomtor/)"]
     end
 
-    UI --> ROUTE
+    UI --> PROXY
+    PROXY --> ROUTE
     SDK <--> SONIOX
-    REC --> FS
+    REC --> E2EE
+    E2EE --> FS
     ROUTE --> SVC
     SVC --> REPO
     REPO --> MONGO
     SVC --> FS
+    SVC --> OPENAI
     ROUTE --> SONIOX
 ```
 
@@ -48,67 +54,68 @@ virtual_comtor/
 ├── .env.example
 ├── package.json
 ├── tsconfig.json
-├── next.config.ts
-├── tailwind.config.ts
-├── components.json                 # ShadCN config
+├── next.config.ts               # CSP headers, standalone output
+├── vitest.config.ts
+├── components.json              # ShadCN config
 │
-├── Vcomtor/                        # Data volume (mounted)
-│   ├── mongodb/                    # MongoDB data
-│   └── storage/                    # User files
+├── Vcomtor/                     # Data volume (mounted)
+│   ├── mongodb/                 # MongoDB data
+│   └── storage/                 # User files (E2EE encrypted)
 │       └── {userId}/
-│           └── {projectId}/
-│               └── {meetingId}/
-│                   ├── audio/      # .webm recordings
-│                   ├── transcripts/# .json raw data
-│                   └── exports/    # .csv/.xlsx
+│           └── {meetingId}/
+│               └── audio.enc    # Encrypted audio
 │
 ├── src/
-│   ├── app/                        # Next.js App Router (mỏng nhất)
-│   │   ├── (auth)/                 # Auth group (no layout)
+│   ├── app/                     # Next.js App Router (mỏng nhất)
+│   │   ├── (auth)/              # Auth group
+│   │   │   ├── layout.tsx
 │   │   │   ├── login/
 │   │   │   │   └── page.tsx
 │   │   │   └── register/
 │   │   │       └── page.tsx
 │   │   │
-│   │   ├── (dashboard)/            # Protected routes group
-│   │   │   ├── layout.tsx          # Dashboard layout + auth guard
-│   │   │   ├── page.tsx            # Dashboard home
+│   │   ├── (dashboard)/         # Protected routes group
+│   │   │   ├── layout.tsx       # Dashboard layout + sidebar
+│   │   │   ├── dashboard/
+│   │   │   │   └── page.tsx     # Dashboard home
 │   │   │   ├── projects/
-│   │   │   │   ├── page.tsx        # Project list
+│   │   │   │   ├── page.tsx     # Project list
 │   │   │   │   └── [projectId]/
-│   │   │   │       ├── page.tsx    # Project detail + meeting list
-│   │   │   │       └── meetings/
-│   │   │   │           └── [meetingId]/
-│   │   │   │               └── page.tsx  # Meeting room (live)
-│   │   │   └── meetings/
-│   │   │       └── [meetingId]/
-│   │   │           └── review/
-│   │   │               └── page.tsx  # Meeting review (after)
+│   │   │   │       └── page.tsx # Project detail + meeting list
+│   │   │   ├── meetings/
+│   │   │   │   └── [meetingId]/
+│   │   │   │       └── page.tsx # Meeting room (live + review)
+│   │   │   └── settings/
+│   │   │       └── page.tsx     # User settings
 │   │   │
-│   │   ├── api/                    # API Routes
+│   │   ├── api/                 # API Routes
 │   │   │   ├── auth/
 │   │   │   │   ├── login/route.ts
 │   │   │   │   ├── register/route.ts
-│   │   │   │   └── refresh/route.ts
+│   │   │   │   ├── refresh/route.ts
+│   │   │   │   ├── logout/route.ts
+│   │   │   │   ├── me/route.ts
+│   │   │   │   └── change-password/route.ts
 │   │   │   ├── projects/
-│   │   │   │   ├── route.ts            # GET list, POST create
+│   │   │   │   ├── route.ts             # GET list, POST create
 │   │   │   │   └── [projectId]/
-│   │   │   │       ├── route.ts        # GET, PUT, DELETE
+│   │   │   │       ├── route.ts         # GET, PUT, DELETE
 │   │   │   │       └── meetings/
-│   │   │   │           └── route.ts    # GET list, POST create
+│   │   │   │           └── route.ts     # GET list, POST create
 │   │   │   ├── meetings/
 │   │   │   │   └── [meetingId]/
-│   │   │   │       ├── route.ts        # GET, PUT, DELETE
-│   │   │   │       ├── transcript/route.ts  # GET/POST transcript
-│   │   │   │       ├── audio/route.ts       # POST upload audio
-│   │   │   │       └── export/route.ts      # GET export CSV/XLSX
+│   │   │   │       ├── route.ts         # GET, PUT, DELETE
+│   │   │   │       ├── transcript/route.ts   # GET/POST transcript
+│   │   │   │       ├── audio/route.ts        # POST upload audio
+│   │   │   │       └── summary/route.ts      # POST generate AI summary
 │   │   │   └── soniox/
-│   │   │       └── temp-key/route.ts   # POST get temp API key
+│   │   │       └── temp-key/route.ts    # POST get temp API key
 │   │   │
-│   │   ├── layout.tsx              # Root layout
-│   │   └── globals.css             # Global + dark theme CSS vars
+│   │   ├── layout.tsx           # Root layout
+│   │   ├── page.tsx             # Landing page (redirect)
+│   │   └── globals.css          # Global + dark theme CSS vars
 │   │
-│   ├── features/                   # Feature-based organization
+│   ├── features/                # Feature-based organization
 │   │   ├── auth/
 │   │   │   ├── api/
 │   │   │   │   └── authApi.ts
@@ -116,120 +123,106 @@ virtual_comtor/
 │   │   │   │   ├── LoginForm.tsx
 │   │   │   │   └── RegisterForm.tsx
 │   │   │   ├── hooks/
-│   │   │   │   └── useAuth.ts
-│   │   │   ├── types/
-│   │   │   │   └── index.ts
+│   │   │   │   └── useAuth.tsx
 │   │   │   └── index.ts
 │   │   │
 │   │   ├── projects/
-│   │   │   ├── api/
-│   │   │   │   └── projectApi.ts
-│   │   │   ├── components/
-│   │   │   │   ├── ProjectList.tsx
-│   │   │   │   ├── ProjectCard.tsx
-│   │   │   │   └── CreateProjectDialog.tsx
-│   │   │   ├── hooks/
-│   │   │   │   └── useProjects.ts
-│   │   │   ├── types/
-│   │   │   │   └── index.ts
-│   │   │   └── index.ts
+│   │   │   └── api/
+│   │   │       └── projectApi.ts
 │   │   │
 │   │   ├── meetings/
-│   │   │   ├── api/
-│   │   │   │   └── meetingApi.ts
-│   │   │   ├── components/
-│   │   │   │   ├── MeetingList.tsx
-│   │   │   │   ├── MeetingCard.tsx
-│   │   │   │   └── CreateMeetingDialog.tsx
-│   │   │   ├── hooks/
-│   │   │   │   └── useMeetings.ts
-│   │   │   ├── types/
-│   │   │   │   └── index.ts
-│   │   │   └── index.ts
+│   │   │   └── api/
+│   │   │       └── meetingApi.ts
 │   │   │
-│   │   └── translation/            # ⭐ Core feature
-│   │       ├── api/
-│   │       │   └── translationApi.ts
+│   │   └── translation/         # ⭐ Core feature
 │   │       ├── components/
-│   │       │   ├── MeetingRoom.tsx       # Main container
-│   │       │   ├── TranscriptPanel.tsx   # Scrollable transcript
-│   │       │   ├── TranscriptEntry.tsx   # Single transcript line
-│   │       │   ├── SpeakerBadge.tsx      # "Customer 1" / "Our 2"
-│   │       │   ├── LanguageBadge.tsx     # 🇯🇵 / 🇻🇳
-│   │       │   ├── MeetingControls.tsx   # Start/Stop/Record
-│   │       │   ├── ReplyButton.tsx       # Push-to-talk
-│   │       │   └── ReplyPreview.tsx      # Preview + confirm
+│   │       │   ├── MeetingRoom.tsx        # Main container
+│   │       │   ├── TranscriptPanel.tsx    # Scrollable transcript
+│   │       │   ├── TranscriptEntryItem.tsx# Single transcript line
+│   │       │   ├── TranscriptViewer.tsx   # Review transcript (post-meeting)
+│   │       │   ├── MeetingSummary.tsx     # AI-generated summary display
+│   │       │   ├── SpeakerBadge.tsx       # "Customer 1" / "Our 2"
+│   │       │   ├── LanguageBadge.tsx      # 🇯🇵 / 🇻🇳
+│   │       │   └── MeetingControls.tsx    # Start/Stop/Record
 │   │       ├── hooks/
-│   │       │   ├── useSonioxRealtime.ts  # WebSocket management
-│   │       │   ├── useTranscript.ts      # Transcript state
-│   │       │   ├── useSpeakerMapping.ts  # Speaker → label logic
-│   │       │   ├── useAudioRecorder.ts   # MediaRecorder hook
-│   │       │   └── useReplyRecorder.ts   # Reply recording
+│   │       │   ├── useSonioxRealtime.ts   # WebSocket management
+│   │       │   ├── useTranscript.ts       # Transcript state
+│   │       │   ├── useSpeakerMapping.ts   # Speaker → label logic
+│   │       │   ├── useAudioRecorder.ts    # MediaRecorder hook
+│   │       │   └── useCryptoWorker.ts     # Web Worker for E2EE
 │   │       ├── helpers/
-│   │       │   ├── speakerLabeler.ts     # Assign Customer/Our labels
-│   │       │   ├── transcriptFormatter.ts# Format for display
-│   │       │   └── exportHelpers.ts      # CSV/XLSX generation
-│   │       ├── types/
-│   │       │   └── index.ts
+│   │       │   ├── speakerLabeler.ts      # Assign Customer/Our labels
+│   │       │   └── exportTranscript.ts    # CSV/XLSX generation
+│   │       ├── components/__tests__/      # Component tests
+│   │       ├── hooks/__tests__/           # Hook tests
+│   │       ├── helpers/__tests__/         # Helper tests
 │   │       └── index.ts
 │   │
-│   ├── components/                 # Shared/reusable UI components
-│   │   ├── ui/                     # ShadCN components (auto-generated)
+│   ├── components/              # Shared/reusable UI components
+│   │   ├── ui/                  # ShadCN components
 │   │   │   ├── button.tsx
 │   │   │   ├── card.tsx
-│   │   │   ├── dialog.tsx
 │   │   │   ├── input.tsx
-│   │   │   └── ...
+│   │   │   ├── label.tsx
+│   │   │   └── separator.tsx
 │   │   ├── AppSidebar.tsx
 │   │   ├── ThemeProvider.tsx
-│   │   ├── AuthGuard.tsx
+│   │   ├── ErrorBoundary.tsx
+│   │   ├── LanguageSwitcher.tsx
 │   │   └── LoadingSpinner.tsx
 │   │
-│   ├── services/                   # Business logic (server-side)
+│   ├── services/                # Business logic (server-side)
 │   │   ├── auth.service.ts
-│   │   ├── user.service.ts
-│   │   ├── project.service.ts
 │   │   ├── meeting.service.ts
-│   │   ├── transcript.service.ts
-│   │   └── soniox.service.ts
+│   │   ├── openai.service.ts    # AI meeting summary
+│   │   ├── project.service.ts
+│   │   └── transcript.service.ts
 │   │
-│   ├── repositories/              # Data access layer
+│   ├── repositories/            # Data access layer
 │   │   ├── user.repository.ts
 │   │   ├── project.repository.ts
 │   │   ├── meeting.repository.ts
 │   │   └── transcript.repository.ts
 │   │
-│   ├── models/                    # Mongoose models
+│   ├── models/                  # Mongoose models
 │   │   ├── User.ts
 │   │   ├── Project.ts
 │   │   ├── Meeting.ts
 │   │   └── TranscriptEntry.ts
 │   │
-│   ├── validations/               # Zod schemas
+│   ├── validations/             # Zod schemas
 │   │   ├── auth.schema.ts
 │   │   ├── project.schema.ts
 │   │   └── meeting.schema.ts
 │   │
-│   ├── lib/                       # Utilities & SDK init
-│   │   ├── db.ts                  # MongoDB connection singleton
-│   │   ├── auth.ts                # JWT helpers (sign, verify)
-│   │   ├── soniox.ts             # Soniox config
-│   │   ├── storage.ts            # File system helpers
-│   │   ├── i18n/                 # Internationalization
-│   │   │   ├── types.ts          # TranslationSet interface
-│   │   │   ├── vi.ts             # 🇻🇳 Tiếng Việt
-│   │   │   ├── en.ts             # 🇺🇸 English
-│   │   │   ├── ja.ts             # 🇯🇵 日本語
-│   │   │   └── index.tsx         # I18nProvider + useI18n hook
-│   │   └── api-response.ts       # Standardized API responses
+│   ├── lib/                     # Utilities & SDK init
+│   │   ├── db.ts                # MongoDB connection singleton
+│   │   ├── auth.ts              # JWT helpers (sign, verify)
+│   │   ├── api-auth.ts          # API route auth helper (getAuthUser)
+│   │   ├── api-response.ts      # Standardized API responses
+│   │   ├── crypto.ts            # E2EE: AES-256-GCM, PBKDF2, key wrapping
+│   │   ├── crypto-worker.ts     # Web Worker script for crypto ops
+│   │   ├── soniox.ts            # Soniox config
+│   │   ├── storage.ts           # File system path helpers
+│   │   ├── storage-provider.ts  # Storage abstraction (local/S3)
+│   │   ├── utils.ts             # cn() utility
+│   │   └── i18n/                # Internationalization
+│   │       ├── types.ts         # TranslationSet interface
+│   │       ├── vi.ts            # 🇻🇳 Tiếng Việt
+│   │       ├── en.ts            # 🇺🇸 English
+│   │       ├── ja.ts            # 🇯🇵 日本語
+│   │       └── index.tsx        # I18nProvider + useI18n hook
 │   │
-│   ├── proxy.ts                  # Next.js 16 proxy (auth guard)
+│   ├── proxy.ts                 # Next.js 16 proxy (auth guard)
 │   │
-│   └── types/                     # Shared TypeScript types
+│   └── types/                   # Shared TypeScript types
 │       ├── auth.types.ts
 │       ├── api.types.ts
 │       ├── meeting.types.ts
 │       └── transcript.types.ts
+│
+├── tests/
+│   └── setup.ts                 # Global test setup (@testing-library/jest-dom)
 ```
 
 ---
@@ -311,6 +304,7 @@ interface ITranscriptEntry {
 sequenceDiagram
     participant U as User
     participant FE as Frontend
+    participant PROXY as Proxy (Auth Guard)
     participant API as API Route
     participant SVC as AuthService
     participant REPO as UserRepository
@@ -363,7 +357,27 @@ sequenceDiagram
     APP->>DB: Save all transcript entries
 ```
 
-### 4.3 Speaker Labeling Logic
+### 4.3 Meeting Summary Flow (AI)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant API as API Route
+    participant SVC as OpenAI Service
+    participant OPENAI as OpenAI API
+
+    U->>FE: Click "Generate Summary"
+    FE->>API: POST /api/meetings/[id]/summary
+    API->>API: Fetch transcript from DB
+    API->>SVC: generateMeetingSummary(transcript, locale)
+    SVC->>OPENAI: GPT-4o-mini with system prompt
+    OPENAI-->>SVC: JSON {summary, keyPoints, actionItems}
+    SVC-->>API: MeetingSummaryData
+    API-->>FE: Display summary
+```
+
+### 4.4 Speaker Labeling Logic
 
 ```
 Input: speaker_id (từ Soniox), language (từ Soniox)
@@ -381,7 +395,29 @@ Logic:
 
 ---
 
-## 5. Coding Standards
+## 5. Security
+
+### E2EE (End-to-End Encryption)
+
+Audio recordings are encrypted client-side before upload:
+
+- **Algorithm**: AES-256-GCM (Web Crypto API)
+- **Key derivation**: PBKDF2-SHA256 (600,000 iterations)
+- **Key wrapping**: AES-KW for data key protection
+- **Implementation**: `src/lib/crypto.ts` + `src/lib/crypto-worker.ts` (Web Worker)
+- **Storage**: Encrypted files stored as `.enc` in `Vcomtor/storage/{userId}/{meetingId}/`
+
+### Content Security Policy (CSP)
+
+Configured in `next.config.ts`:
+- `connect-src`: allows `wss://stt-rt.soniox.com` for Soniox WebSocket
+- `frame-ancestors: 'none'` — prevents clickjacking
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+
+---
+
+## 6. Coding Standards
 
 ### Backend (Server-side)
 
@@ -393,6 +429,7 @@ Logic:
 | **Validation** | Zod schema, validate ở API route level |
 | **Error handling** | Custom error classes, catch ở API route |
 | **Response format** | Chuẩn hóa: `{ success, data, error, message }` |
+| **Auth helper** | `getAuthUser()` + `isAuthError()` trong `api-auth.ts` |
 
 ### Frontend (Client-side)
 
@@ -401,7 +438,6 @@ Logic:
 | **Feature-based** | Domain logic trong `features/`, shared UI trong `components/` |
 | **Component size** | Max 300 lines, split nếu lớn hơn |
 | **Hooks** | Custom hooks cho logic, không để logic trong component |
-| **Data fetching** | TanStack Query (`useQuery`, `useMutation`) |
 | **Type safety** | Strict TypeScript, no `any`, explicit return types |
 | **Import** | `@/` cho src root, tương đối cho cùng feature |
 | **Naming** | PascalCase components, camelCase utils/hooks |
@@ -419,7 +455,7 @@ Logic:
 
 ---
 
-## 6. API Response Format
+## 7. API Response Format
 
 ```typescript
 // Thành công
@@ -440,19 +476,27 @@ Logic:
 
 ---
 
-## 7. File Storage Convention
+## 8. File Storage Convention
 
 ```
-Vcomtor/storage/{userId}/{projectId}/{meetingId}/
-├── audio/
-│   └── recording_{timestamp}.webm    # Full meeting audio
-├── transcripts/
-│   └── transcript_{timestamp}.json   # Raw transcript data
-└── exports/
-    ├── transcript_{timestamp}.csv
-    └── transcript_{timestamp}.xlsx
+Vcomtor/storage/{userId}/{meetingId}/
+└── audio.enc            # E2EE encrypted audio (WebM → AES-256-GCM)
 ```
 
-- Audio format: WebM (MediaRecorder default, good quality/size ratio)
-- Transcript JSON lưu raw data, bao gồm cả timing + confidence
-- Export CSV/XLSX chỉ chứa readable columns: Time, Speaker, Language, Original, Translation
+- Audio encrypted client-side via Web Crypto API before upload
+- Stored with `.enc` extension
+- Decryption happens client-side with user's password-derived key
+- `StorageProvider` interface supports future S3 migration
+
+---
+
+## 9. Auth Guard (Proxy)
+
+Next.js 16 uses `proxy.ts` instead of deprecated `middleware.ts`:
+
+```
+Protected routes:  /dashboard, /projects, /meetings, /api/projects, /api/meetings, /api/soniox
+Auth pages:        /login, /register (redirect to dashboard if logged in)
+```
+
+Token flow: httpOnly cookies (`accessToken`, `refreshToken`) → `verifyAccessToken()` via `jose`.

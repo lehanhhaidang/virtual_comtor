@@ -1,36 +1,105 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Virtual Comtor
 
-## Getting Started
+Ứng dụng dịch thuật real-time cho cuộc họp Nhật-Việt, hỗ trợ nhận diện người nói và AI tóm tắt cuộc họp.
 
-First, run the development server:
+## ✨ Tính năng chính
+
+- 🎤 **Dịch thuật real-time** — Soniox STT (ja↔vi), diarization, language identification
+- 👥 **Nhận diện người nói** — Tự động phân biệt "Customer 1", "Our 2" theo ngôn ngữ
+- 🤖 **AI Meeting Summary** — Tóm tắt cuộc họp bằng GPT-4o-mini (vi/en/ja)
+- 🔐 **E2EE** — Ghi âm mã hóa client-side (AES-256-GCM)
+- 📊 **Export** — Xuất transcript CSV/XLSX
+- 🌐 **Đa ngôn ngữ** — UI hỗ trợ 🇻🇳 Tiếng Việt, 🇺🇸 English, 🇯🇵 日本語
+- 🌙 **Dark theme** — Industrial Dark design, tối ưu cho phòng họp
+
+## 🛠 Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript 5 (strict) |
+| UI | ShadCN/ui + Tailwind CSS 4 |
+| Database | MongoDB 7 + Mongoose |
+| Auth | JWT (jose) + bcryptjs |
+| STT | Soniox (WebSocket) |
+| AI Summary | OpenAI GPT-4o-mini |
+| Encryption | Web Crypto API (AES-256-GCM) |
+| Testing | Vitest + React Testing Library |
+| Deploy | Docker + Docker Compose |
+
+## 📋 Tài liệu
+
+- [Architecture](architecture.md) — Kiến trúc, data models, luồng xử lý
+- [Tech Stack](tech-stack.md) — Chi tiết công nghệ, cấu hình
+- [Implementation Plan](implementation_plan.md) — Kế hoạch triển khai theo phase
+- [Testing Strategy](testing-strategy.md) — Chiến lược testing, kết quả
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js 20+
+- Docker & Docker Compose (cho MongoDB)
+- Soniox API key ([console.soniox.com](https://console.soniox.com))
+- OpenAI API key (cho AI summary)
+
+### Local Development
 
 ```bash
+# 1. Clone & install
+git clone <repo-url>
+cd virtual_comtor
+npm install
+
+# 2. Setup environment
+cp .env.example .env
+# Edit .env — fill in API keys
+
+# 3. Start MongoDB
+docker compose up mongodb mongo-express -d
+
+# 4. Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Mở [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Docker (Production)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker compose up --build -d
+```
 
-## Learn More
+## 🧪 Tests
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Run all tests
+npm test
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Run once (CI mode)
+npm run test:run
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# With coverage
+npm run test:coverage
 
-## Deploy on Vercel
+# Interactive UI
+npm run test:ui
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Status**: 152 tests passing (15 test files)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📁 Project Structure
+
+```
+src/
+├── app/           # Next.js App Router (pages + API routes)
+├── features/      # Feature modules (auth, projects, meetings, translation)
+├── components/    # Shared UI components (ShadCN)
+├── services/      # Business logic (server-side)
+├── repositories/  # Data access layer
+├── models/        # Mongoose schemas
+├── validations/   # Zod schemas
+├── lib/           # Utilities (db, auth, crypto, i18n, storage)
+├── types/         # Shared TypeScript types
+└── proxy.ts       # Auth guard (Next.js 16 proxy)
+```

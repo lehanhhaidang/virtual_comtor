@@ -48,7 +48,7 @@
 ### Kiến trúc phân tầng (Layered Architecture)
 
 ```
-Request → Route/Action → Service → Repository → DB
+Request → Proxy (auth guard) → Route/Action → Service → Repository → DB
 ```
 
 Mỗi tầng **chỉ biết tầng ngay dưới nó**, không nhảy cóc.
@@ -78,13 +78,41 @@ Mỗi tầng **chỉ biết tầng ngay dưới nó**, không nhảy cóc.
 > - No `enable_streaming_translation` field — `translation` object is sufficient
 > - Ref: [Soniox WebSocket API](https://soniox.com/docs/stt/api-reference/websocket-api)
 
-### ElevenLabs — Text-to-Speech (Phase 2, chưa implement)
+### OpenAI — Meeting Summary (GPT-4o-mini)
+
+| Feature       | Ghi chú                                              |
+| ------------- | ---------------------------------------------------- |
+| **Model**     | `gpt-4o-mini`                                        |
+| **Mục đích**  | Tạo tóm tắt cuộc họp (summary, key points, actions) |
+| **Input**     | Plaintext transcript (speaker: text format)          |
+| **Output**    | JSON: `{ summary, keyPoints[], actionItems[] }`      |
+| **Đa ngôn ngữ** | Output theo locale hiện tại (vi/en/ja)             |
+
+### ElevenLabs — Text-to-Speech (Future, chưa implement)
 
 | Feature      | Ghi chú                               |
 | ------------ | ------------------------------------- |
 | **SDK**      | `elevenlabs` npm package              |
 | **Mục đích** | Phát giọng Nhật từ text reply đã dịch |
 | **Trigger**  | Sau khi user confirm reply            |
+
+---
+
+## Security
+
+### E2EE (End-to-End Encryption)
+
+| Feature            | Detail                                                |
+| ------------------ | ----------------------------------------------------- |
+| **Algorithm**      | AES-256-GCM (Web Crypto API)                         |
+| **Key Derivation** | PBKDF2-SHA256, 600,000 iterations (OWASP 2024)       |
+| **Key Wrapping**   | AES-KW for protecting data keys                      |
+| **Implementation** | `src/lib/crypto.ts` + `src/lib/crypto-worker.ts`     |
+| **Scope**          | Audio recordings encrypted client-side before upload |
+
+### Content Security Policy
+
+Configured in `next.config.ts` — includes CSP headers, X-Frame-Options, nosniff.
 
 ---
 
@@ -95,29 +123,31 @@ Mỗi tầng **chỉ biết tầng ngay dưới nó**, không nhảy cóc.
 ```yaml
 services:
   app:           # Next.js standalone build (port 3000)
-  mongodb:       # MongoDB 7 (port 27017)
-  mongo-express: # MongoDB GUI (port 8081)
+  mongodb:       # MongoDB 7 (internal network only, no exposed ports)
+  mongo-express: # MongoDB GUI (localhost:8081 only)
 ```
 
 > [!WARNING]
 > - Dockerfile builds **standalone** (`node server.js`) → no `node_modules` in runner
 > - Do NOT override CMD with `npm run dev` in docker-compose
 > - `.env` uses `localhost` for local dev; docker-compose overrides with `mongodb` hostname
+> - MongoDB port is NOT exposed to host — only accessible via Docker internal network
 
 ### Data Storage (Volume Mount)
 
 ```
 Vcomtor/
-├── {userId}/
-│   ├── {projectId}/
-│   │   ├── {meetingId}/
-│   │   │   ├── audio/          # File ghi âm .webm
-│   │   │   ├── transcripts/    # Raw transcript JSON
-│   │   │   └── exports/        # CSV/XLSX exports
+├── mongodb/               # MongoDB data (volume mount)
+└── storage/
+    └── {userId}/
+        └── {meetingId}/
+            └── audio.enc  # E2EE encrypted audio
 ```
 
-- MongoDB data cũng mount ra folder `Vcomtor/mongodb/` trong project
-- Dữ liệu audio + transcript lưu theo cấu trúc `userId/projectId/meetingId`
+- `StorageProvider` interface (`src/lib/storage-provider.ts`) abstracts storage backend
+- Current: `LocalStorageProvider` (filesystem)
+- Future: `S3StorageProvider` (AWS S3)
+- Switch via `STORAGE_PROVIDER` env variable
 
 ---
 
@@ -145,10 +175,18 @@ SONIOX_API_KEY=your_soniox_api_key
 # Auth
 JWT_SECRET=your_jwt_secret
 JWT_REFRESH_SECRET=your_jwt_refresh_secret
+JWT_ACCESS_EXPIRY=15m
+JWT_REFRESH_EXPIRY=7d
 
-# ElevenLabs (Phase 7)
+# OpenAI (meeting summary)
+OPENAI_API_KEY=your_openai_api_key
+
+# ElevenLabs (Future)
 # ELEVENLABS_API_KEY=your_elevenlabs_api_key
 
 # App
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Storage
+STORAGE_PATH=./Vcomtor/storage
 ```
