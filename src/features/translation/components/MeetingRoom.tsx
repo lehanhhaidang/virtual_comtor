@@ -255,6 +255,17 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         </div>
       )}
 
+      {/* Audio player — shown right above transcript after meeting ends */}
+      {isEnded && mode === 'standard' && dataKeyRef && (
+        <AudioPlayer
+          meetingId={meetingId}
+          meetingTitle={meetingTitle}
+          dataKey={dataKeyRef}
+          onTimeUpdate={setCurrentMs}
+          seekRef={seekToRef}
+        />
+      )}
+
       {/* Transcript */}
       <div className="flex-1 overflow-hidden">
         <TranscriptPanel
@@ -266,25 +277,13 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         />
       </div>
 
-      {/* AI Summary — visible immediately after ending */}
+      {/* AI Summary */}
       {isEnded && mode === 'standard' && transcript.entries.length > 0 && (
-        <>
-          {/* Audio playback — sync with live entries (startMs/endMs already set) */}
-          {dataKeyRef && (
-            <AudioPlayer
-              meetingId={meetingId}
-              meetingTitle={meetingTitle}
-              dataKey={dataKeyRef}
-              onTimeUpdate={setCurrentMs}
-              seekRef={seekToRef}
-            />
-          )}
-          <MeetingSummary
-            meetingId={meetingId}
-            entries={transcript.entries}
-            dataKey={dataKeyRef}
-          />
-        </>
+        <MeetingSummary
+          meetingId={meetingId}
+          entries={transcript.entries}
+          dataKey={dataKeyRef}
+        />
       )}
 
       {/* Footer stats */}
