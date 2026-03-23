@@ -7,6 +7,10 @@ import { LanguageBadge } from './LanguageBadge';
 interface TranscriptEntryItemProps {
   /** Finalized transcript entry to render. */
   entry: TranscriptEntry;
+  /** Highlight this entry (audio playback cursor is inside its range). */
+  isActive?: boolean;
+  /** Seek audio to this entry's start when clicked. */
+  onSeek?: (startMs: number) => void;
 }
 
 /**
@@ -29,13 +33,20 @@ export function formatTime(ms: number): string {
  * - Original text (colored by language)
  * - Translation (when available)
  */
-export function TranscriptEntryItem({ entry }: TranscriptEntryItemProps) {
+export function TranscriptEntryItem({ entry, isActive, onSeek }: TranscriptEntryItemProps) {
   const isJapanese = entry.language === 'ja';
   const textColor = isJapanese ? 'text-japanese' : 'text-vietnamese';
   const timeStr = formatTime(entry.startMs);
 
   return (
-    <div className="group rounded-xl px-4 py-3 transition-colors hover:bg-background/30">
+    <div
+      onClick={() => onSeek?.(entry.startMs)}
+      className={`group rounded-xl px-4 py-3 transition-colors ${
+        isActive
+          ? 'bg-primary/10 ring-1 ring-primary/30'
+          : 'hover:bg-background/30 cursor-pointer'
+      } ${onSeek ? 'cursor-pointer' : ''}`}
+    >
       {/* Speaker header: flag + label + time */}
       <div className="mb-1 flex items-center gap-2">
         <LanguageBadge language={entry.language} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -21,6 +21,7 @@ import type { TranscriptEntry } from '@/types/transcript.types';
 import type { ApiResponse } from '@/types/api.types';
 import { TranscriptEntryItem } from './TranscriptEntryItem';
 import { MeetingSummary } from './MeetingSummary';
+import { AudioPlayer } from './AudioPlayer';
 
 interface TranscriptViewerProps {
   meetingId: string;
@@ -49,6 +50,10 @@ export function TranscriptViewer({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [dataKeyRef, setDataKeyRef] = useState<CryptoKey | null>(null);
   const [downloadingAudio, setDownloadingAudio] = useState(false);
+  // Audio playback sync
+  const [currentMs, setCurrentMs] = useState(0);
+  const seekToRef = useRef<((ms: number) => void) | null>(null);
+  const activeEntryRef = useRef<HTMLDivElement | null>(null);
 
   // Fetch and decrypt entries on mount
   useEffect(() => {
@@ -138,6 +143,11 @@ export function TranscriptViewer({
   const handleBack = useCallback(() => {
     router.push(projectId ? `/projects/${projectId}` : '/projects');
   }, [router, projectId]);
+
+  // Auto-scroll active entry into view during playback
+  useEffect(() => {
+    activeEntryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [currentMs]);
 
   return (
     <div className="flex h-[100dvh] flex-col gap-2 lg:h-[calc(100vh-4rem)] lg:gap-4">
@@ -240,6 +250,17 @@ export function TranscriptViewer({
         </Button>
       </div>
 
+      {/* Audio player — shown when data key is ready (audio may or may not exist) */}
+      {dataKeyRef && (
+        <AudioPlayer
+          meetingId={meetingId}
+          meetingTitle={meetingTitle}
+          dataKey={dataKeyRef}
+          onTimeUpdate={setCurrentMs}
+          seekRef={seekToRef}
+        />
+      )}
+
       {/* Delete confirmation */}
       {showDeleteConfirm && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3">
@@ -291,9 +312,18 @@ export function TranscriptViewer({
           </div>
         ) : (
           <div className="space-y-2">
-            {filtered.map((entry) => (
-              <TranscriptEntryItem key={entry.id ?? `${entry.startMs}-${entry.speakerId}`} entry={entry} />
-            ))}
+            {filtered.map((entry) => {
+              const active = currentMs >= entry.startMs && currentMs < entry.endMs;
+              return (
+                <div key={entry.id ?? `${entry.startMs}-${entry.speakerId}`} ref={active ? activeEntryRef : null}>
+                  <TranscriptEntryItem
+                    entry={entry}
+                    isActive={active}
+                    onSeek={seekToRef.current ? (ms) => seekToRef.current!(ms) : undefined}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
