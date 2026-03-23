@@ -5,7 +5,9 @@ export interface TranscriptEntry {
   meetingId: string;
   speakerId: string;
   speakerLabel: string;
-  language: 'ja' | 'vi';
+  /** 1-indexed speaker number for stable badge color assignment. */
+  speakerNumber: number;
+  language: 'ja' | 'vi' | 'en' | 'zh' | 'ko';
   originalText: string;
   translatedText: string;
   startMs: number;

@@ -33,11 +33,13 @@ export function useTranscript(meetingId: string) {
       confidence: number
     ) => {
       const label = labelerRef.current.getLabel(speakerId, language);
+      const speakerNumber = labelerRef.current.getSpeakerNumber(speakerId);
       const entry: TranscriptEntry = {
         id: `entry-${++entryIdRef.current}`,
         meetingId,
         speakerId,
         speakerLabel: label,
+        speakerNumber,
         language,
         originalText,
         translatedText,

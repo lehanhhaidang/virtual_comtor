@@ -3,7 +3,6 @@ import type { SonioxLanguage } from '@/lib/soniox';
 interface SpeakerInfo {
   label: string;
   language: SonioxLanguage;
-  group: 'customer' | 'our';
   number: number;
 }
 
@@ -11,14 +10,13 @@ interface SpeakerInfo {
  * SpeakerLabeler — assigns human-readable labels to speaker IDs.
  *
  * Logic:
- * - Japanese speaker → "Customer N"
- * - Vietnamese speaker → "Our N"
- * - Same speaker always gets same label (first language wins)
+ * - Each unique speakerId gets "Speaker N" in encounter order.
+ * - Language does NOT affect the label or group.
+ * - Same speaker always gets same label (first encounter wins).
  */
 export class SpeakerLabeler {
   private speakers = new Map<string, SpeakerInfo>();
-  private customerCount = 0;
-  private ourCount = 0;
+  private speakerCount = 0;
 
   /**
    * Get label for a speaker. Creates new mapping if first time.
@@ -27,14 +25,10 @@ export class SpeakerLabeler {
     const existing = this.speakers.get(speakerId);
     if (existing) return existing.label;
 
-    // First time seeing this speaker — classify by language
-    const isJapanese = language === 'ja';
-    const group = isJapanese ? 'customer' : 'our';
-    const number = isJapanese ? ++this.customerCount : ++this.ourCount;
-    const prefix = isJapanese ? 'Customer' : 'Our';
-    const label = `${prefix} ${number}`;
+    const number = ++this.speakerCount;
+    const label = `Speaker ${number}`;
 
-    this.speakers.set(speakerId, { label, language, group, number });
+    this.speakers.set(speakerId, { label, language, number });
     return label;
   }
 
@@ -43,6 +37,13 @@ export class SpeakerLabeler {
    */
   getInfo(speakerId: string): SpeakerInfo | undefined {
     return this.speakers.get(speakerId);
+  }
+
+  /**
+   * Get the speaker number (1-indexed) for badge color assignment.
+   */
+  getSpeakerNumber(speakerId: string): number {
+    return this.speakers.get(speakerId)?.number ?? 1;
   }
 
   /**
@@ -61,7 +62,6 @@ export class SpeakerLabeler {
    */
   reset(): void {
     this.speakers.clear();
-    this.customerCount = 0;
-    this.ourCount = 0;
+    this.speakerCount = 0;
   }
 }

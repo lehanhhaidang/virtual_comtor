@@ -81,7 +81,7 @@ describe('useTranscript', () => {
       act(() => {
         addTestEntry(result.current, { speakerId: 'spk-1', language: 'ja' });
       });
-      expect(result.current.entries[0].speakerLabel).toBe('Customer 1');
+      expect(result.current.entries[0].speakerLabel).toBe('Speaker 1');
     });
 
     it('assigns "Our 1" label to Vietnamese speaker', () => {
@@ -89,7 +89,7 @@ describe('useTranscript', () => {
       act(() => {
         addTestEntry(result.current, { speakerId: 'spk-vi', language: 'vi' });
       });
-      expect(result.current.entries[0].speakerLabel).toBe('Our 1');
+      expect(result.current.entries[0].speakerLabel).toBe('Speaker 1');
     });
 
     it('assigns unique IDs to each entry', () => {
@@ -120,7 +120,7 @@ describe('useTranscript', () => {
         result.current.updateInterim('Partial text...', 'spk-1', 'ja');
       });
       expect(result.current.currentText).toBe('Partial text...');
-      expect(result.current.currentSpeaker).toBe('Customer 1');
+      expect(result.current.currentSpeaker).toBe('Speaker 1');
     });
 
     it('updates interim text on subsequent calls', () => {
@@ -217,7 +217,7 @@ describe('useTranscript', () => {
         result.current.reset();
         addTestEntry(result.current, { speakerId: 'spk-new', language: 'ja' }); // Should be Customer 1 again
       });
-      expect(result.current.entries[0].speakerLabel).toBe('Customer 1');
+      expect(result.current.entries[0].speakerLabel).toBe('Speaker 1');
     });
   });
 
@@ -234,8 +234,8 @@ describe('useTranscript', () => {
         addTestEntry(result.current, { speakerId: 'spk-vi', language: 'vi' });
       });
       const mapping = result.current.getSpeakerMapping();
-      expect(mapping['spk-ja']).toEqual({ label: 'Customer 1', language: 'ja' });
-      expect(mapping['spk-vi']).toEqual({ label: 'Our 1', language: 'vi' });
+      expect(mapping['spk-ja']).toEqual({ label: 'Speaker 1', language: 'ja' });
+      expect(mapping['spk-vi']).toEqual({ label: 'Speaker 2', language: 'vi' });
     });
   });
 });

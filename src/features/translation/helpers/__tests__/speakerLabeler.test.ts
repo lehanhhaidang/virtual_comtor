@@ -14,46 +14,42 @@ describe('SpeakerLabeler', () => {
   });
 
   describe('getLabel', () => {
-    it('assigns "Customer 1" to the first Japanese speaker', () => {
-      expect(labeler.getLabel('spk-A', 'ja')).toBe('Customer 1');
+    it('assigns "Speaker 1" to the first speaker regardless of language', () => {
+      expect(labeler.getLabel('spk-A', 'ja')).toBe('Speaker 1');
     });
 
-    it('assigns "Our 1" to the first Vietnamese speaker', () => {
-      expect(labeler.getLabel('spk-B', 'vi')).toBe('Our 1');
+    it('assigns "Speaker 1" to the first Vietnamese speaker', () => {
+      expect(labeler.getLabel('spk-B', 'vi')).toBe('Speaker 1');
     });
 
     it('returns the same label on repeated calls for the same speakerId', () => {
       labeler.getLabel('spk-A', 'ja');
-      expect(labeler.getLabel('spk-A', 'ja')).toBe('Customer 1');
+      expect(labeler.getLabel('spk-A', 'ja')).toBe('Speaker 1');
     });
 
     it('first language wins — second call with different language returns original label', () => {
-      labeler.getLabel('spk-A', 'ja'); // Registered as Customer 1
-      // Even if called again with 'vi', the first registration stands
-      expect(labeler.getLabel('spk-A', 'vi')).toBe('Customer 1');
+      labeler.getLabel('spk-A', 'ja');
+      expect(labeler.getLabel('spk-A', 'vi')).toBe('Speaker 1');
     });
 
-    it('increments customer counter independently for each new Japanese speaker', () => {
-      expect(labeler.getLabel('spk-A', 'ja')).toBe('Customer 1');
-      expect(labeler.getLabel('spk-B', 'ja')).toBe('Customer 2');
-      expect(labeler.getLabel('spk-C', 'ja')).toBe('Customer 3');
+    it('increments counter for each new speaker regardless of language', () => {
+      expect(labeler.getLabel('spk-A', 'ja')).toBe('Speaker 1');
+      expect(labeler.getLabel('spk-B', 'ja')).toBe('Speaker 2');
+      expect(labeler.getLabel('spk-C', 'vi')).toBe('Speaker 3');
     });
 
-    it('increments our counter independently for each new Vietnamese speaker', () => {
-      expect(labeler.getLabel('spk-X', 'vi')).toBe('Our 1');
-      expect(labeler.getLabel('spk-Y', 'vi')).toBe('Our 2');
+    it('does not re-increment when same speaker appears with different language', () => {
+      labeler.getLabel('spk-A', 'ja'); // Speaker 1
+      labeler.getLabel('spk-B', 'vi'); // Speaker 2
+
+      expect(labeler.getLabel('spk-A', 'vi')).toBe('Speaker 1');
+      expect(labeler.getLabel('spk-B', 'ja')).toBe('Speaker 2');
     });
 
-    it('maintains separate counters for Japanese and Vietnamese', () => {
-      labeler.getLabel('spk-A', 'ja'); // Customer 1
-      labeler.getLabel('spk-B', 'vi'); // Our 1
-      labeler.getLabel('spk-C', 'ja'); // Customer 2
-      labeler.getLabel('spk-D', 'vi'); // Our 2
-
-      expect(labeler.getLabel('spk-A', 'ja')).toBe('Customer 1');
-      expect(labeler.getLabel('spk-B', 'vi')).toBe('Our 1');
-      expect(labeler.getLabel('spk-C', 'ja')).toBe('Customer 2');
-      expect(labeler.getLabel('spk-D', 'vi')).toBe('Our 2');
+    it('supports en, zh, ko languages', () => {
+      expect(labeler.getLabel('spk-A', 'en')).toBe('Speaker 1');
+      expect(labeler.getLabel('spk-B', 'zh')).toBe('Speaker 2');
+      expect(labeler.getLabel('spk-C', 'ko')).toBe('Speaker 3');
     });
   });
 
@@ -66,15 +62,29 @@ describe('SpeakerLabeler', () => {
       labeler.getLabel('spk-A', 'ja');
       const info = labeler.getInfo('spk-A');
       expect(info).toBeDefined();
-      expect(info?.label).toBe('Customer 1');
+      expect(info?.label).toBe('Speaker 1');
       expect(info?.language).toBe('ja');
-      expect(info?.group).toBe('customer');
       expect(info?.number).toBe(1);
     });
+  });
 
-    it('returns correct group for Vietnamese speaker', () => {
+  describe('getSpeakerNumber', () => {
+    it('returns 1 for first registered speaker', () => {
+      labeler.getLabel('spk-A', 'ja');
+      expect(labeler.getSpeakerNumber('spk-A')).toBe(1);
+    });
+
+    it('returns correct number for each speaker', () => {
+      labeler.getLabel('spk-A', 'ja');
       labeler.getLabel('spk-B', 'vi');
-      expect(labeler.getInfo('spk-B')?.group).toBe('our');
+      labeler.getLabel('spk-C', 'en');
+      expect(labeler.getSpeakerNumber('spk-A')).toBe(1);
+      expect(labeler.getSpeakerNumber('spk-B')).toBe(2);
+      expect(labeler.getSpeakerNumber('spk-C')).toBe(3);
+    });
+
+    it('returns 1 (default) for unknown speaker', () => {
+      expect(labeler.getSpeakerNumber('unknown')).toBe(1);
     });
   });
 
@@ -88,8 +98,8 @@ describe('SpeakerLabeler', () => {
       labeler.getLabel('spk-B', 'vi');
 
       const mapping = labeler.getMapping();
-      expect(mapping['spk-A']).toEqual({ label: 'Customer 1', language: 'ja' });
-      expect(mapping['spk-B']).toEqual({ label: 'Our 1', language: 'vi' });
+      expect(mapping['spk-A']).toEqual({ label: 'Speaker 1', language: 'ja' });
+      expect(mapping['spk-B']).toEqual({ label: 'Speaker 2', language: 'vi' });
     });
   });
 
@@ -101,24 +111,22 @@ describe('SpeakerLabeler', () => {
     });
 
     it('resets counters so numbers start from 1 again after reset', () => {
-      labeler.getLabel('spk-A', 'ja'); // Customer 1
-      labeler.getLabel('spk-B', 'vi'); // Our 1
+      labeler.getLabel('spk-A', 'ja'); // Speaker 1
+      labeler.getLabel('spk-B', 'vi'); // Speaker 2
       labeler.reset();
 
-      expect(labeler.getLabel('spk-NEW', 'ja')).toBe('Customer 1');
-      expect(labeler.getLabel('spk-NEW2', 'vi')).toBe('Our 1');
+      expect(labeler.getLabel('spk-NEW', 'ja')).toBe('Speaker 1');
+      expect(labeler.getLabel('spk-NEW2', 'vi')).toBe('Speaker 2');
     });
 
     it('does not affect new speakers registered after reset', () => {
       labeler.getLabel('spk-A', 'ja');
       labeler.reset();
 
-      // spk-A is unknown again
       expect(labeler.getInfo('spk-A')).toBeUndefined();
 
-      // New registration starts fresh
       const label = labeler.getLabel('spk-A', 'vi');
-      expect(label).toBe('Our 1');
+      expect(label).toBe('Speaker 1');
     });
   });
 });

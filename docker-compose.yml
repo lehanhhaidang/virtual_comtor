@@ -9,6 +9,7 @@ services:
       - ./Vcomtor/storage:/app/Vcomtor/storage
     environment:
       - MONGODB_URI=mongodb://mongodb:27017/virtual_comtor
+      - HOSTNAME=0.0.0.0
     env_file:
       - .env
     depends_on:

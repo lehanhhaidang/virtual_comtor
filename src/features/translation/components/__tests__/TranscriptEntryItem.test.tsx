@@ -13,7 +13,8 @@ function makeEntry(overrides?: Partial<TranscriptEntry>): TranscriptEntry {
     id: 'entry-1',
     meetingId: 'meeting-1',
     speakerId: 'spk-001',
-    speakerLabel: 'Customer 1',
+    speakerLabel: 'Speaker 1',
+    speakerNumber: 1,
     language: 'ja',
     originalText: 'こんにちは',
     translatedText: 'Xin chào',
@@ -120,12 +121,11 @@ describe('TranscriptEntryItem', () => {
     it('passes sonioxSpeakerId to SpeakerBadge as tooltip', () => {
       render(
         <TranscriptEntryItem
-          entry={makeEntry({ speakerId: 'spk-XYZ', speakerLabel: 'Customer 1' })}
+          entry={makeEntry({ speakerId: 'spk-XYZ', speakerLabel: 'Speaker 1', speakerNumber: 1 })}
         />
       );
-      // SpeakerBadge renders with title=Soniox ID: spk-XYZ
-      const badge = screen.getByText('Customer 1');
-      expect(badge).toHaveAttribute('title', 'Soniox ID: spk-XYZ');
+      const badge = screen.getByText('Speaker 1');
+      expect(badge).toHaveAttribute('title', 'Soniox ID: spk-XYZ · JA');
     });
   });
 });

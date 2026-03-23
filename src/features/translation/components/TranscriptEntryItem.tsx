@@ -43,6 +43,7 @@ export function TranscriptEntryItem({ entry }: TranscriptEntryItemProps) {
           label={entry.speakerLabel}
           language={entry.language}
           sonioxSpeakerId={entry.speakerId}
+          speakerNumber={entry.speakerNumber}
         />
         <span className="text-[10px] text-muted-foreground/50">{timeStr}</span>
       </div>

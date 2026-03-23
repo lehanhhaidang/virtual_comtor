@@ -11,7 +11,7 @@ export const SONIOX_CONFIG = {
   audioFormat: 'auto',
 
   /** Primary languages for the meeting */
-  languageHints: ['ja', 'vi'],
+  languageHints: ['ja', 'vi', 'en', 'zh', 'ko'],
 
   /** Enable speaker diarization to distinguish speakers */
   enableSpeakerDiarization: true,
@@ -33,4 +33,4 @@ export const SONIOX_API_URL = 'https://api.soniox.com/v1';
 /** Soniox WebSocket endpoint for real-time streaming */
 export const SONIOX_WS_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 
-export type SonioxLanguage = 'ja' | 'vi';
+export type SonioxLanguage = 'ja' | 'vi' | 'en' | 'zh' | 'ko';
