@@ -48,7 +48,10 @@ export function AppSidebar() {
         <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
           <Languages className="h-5 w-5 text-primary" />
         </div>
-        <span className="text-lg font-bold tracking-tight">{t.common.appName}</span>
+        <div className="flex flex-col leading-tight">
+          <span className="text-lg font-bold tracking-tight">{t.common.appName}</span>
+          <span className="text-xs text-muted-foreground">v{process.env.NEXT_PUBLIC_APP_VERSION}</span>
+        </div>
       </div>
 
       {/* Navigation */}

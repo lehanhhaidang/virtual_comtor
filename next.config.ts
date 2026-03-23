@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
 
+  // Expose app version (SemVer) to the client.
+  // `npm_package_version` is provided by npm scripts/build environments.
+  env: {
+    NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version || '0.0.0',
+  },
+
   async headers() {
     return [
       {
