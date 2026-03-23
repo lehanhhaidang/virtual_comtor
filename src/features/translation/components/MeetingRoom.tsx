@@ -48,7 +48,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const seekToRef = useRef<((ms: number) => void) | null>(null);
 
   const transcript = useTranscript(meetingId);
-  const { isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob } = useAudioRecorder();
+  const { isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob, waitForBlob } = useAudioRecorder();
 
   const soniox = useSonioxRealtime({
     onFinalTokens: transcript.addEntry,
@@ -115,17 +115,8 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         // Save transcript (encrypted)
         await transcript.saveToServer(() => Promise.resolve(dataKey));
 
-        // Upload encrypted audio — wait briefly for blob to finalize
-        const blob = await new Promise<Blob | null>((resolve) => {
-          let attempts = 0;
-          const check = () => {
-            const b = getBlob();
-            if (b || attempts > 20) { resolve(b); return; }
-            attempts++;
-            setTimeout(check, 200);
-          };
-          check();
-        });
+        // Wait for MediaRecorder.onstop to fire and blob to finalize (reliable, no polling)
+        const blob = await waitForBlob();
 
         if (blob && blob.size > 0) {
           // Encrypt audio blob
@@ -153,7 +144,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
 
     await meetingApi.update(meetingId, { status: 'completed' });
     setIsEnded(true);
-  }, [meetingId, soniox, stopRecording, getBlob, transcript, mode, getDataKey]);
+  }, [meetingId, soniox, stopRecording, waitForBlob, transcript, mode, getDataKey]);
 
   /**
    * Navigate back; prompts confirmation when a meeting is active.

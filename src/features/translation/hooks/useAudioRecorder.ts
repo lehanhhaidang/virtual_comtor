@@ -12,6 +12,8 @@ interface UseAudioRecorderReturn {
   downloadRecording: (filename: string) => void;
   /** Get the raw recorded blob (for upload) */
   getBlob: () => Blob | null;
+  /** Returns a Promise that resolves with the blob exactly when MediaRecorder.onstop fires */
+  waitForBlob: () => Promise<Blob | null>;
 }
 
 /**
@@ -43,6 +45,9 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const blobRef = useRef<Blob | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  // Promise that resolves when MediaRecorder.onstop fires
+  const blobResolverRef = useRef<((b: Blob | null) => void) | null>(null);
+  const blobPromiseRef = useRef<Promise<Blob | null>>(Promise.resolve(null));
 
   /**
    * Start recording audio from the provided MediaStream.
@@ -54,6 +59,11 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     blobRef.current = null;
     setHasRecording(false);
     setDuration(0);
+
+    // Create a new promise that will resolve when onstop fires
+    blobPromiseRef.current = new Promise<Blob | null>((resolve) => {
+      blobResolverRef.current = resolve;
+    });
 
     const mimeType = getSupportedMimeType();
     const recorder = new MediaRecorder(stream, { mimeType });
@@ -70,6 +80,10 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       blobRef.current = blob;
       setHasRecording(true);
       setIsRecording(false);
+
+      // Resolve the waiting promise
+      blobResolverRef.current?.(blob);
+      blobResolverRef.current = null;
 
       // Clear duration timer
       if (intervalRef.current !== null) {
@@ -142,6 +156,8 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
 
   const getBlob = useCallback((): Blob | null => blobRef.current, []);
 
+  const waitForBlob = useCallback((): Promise<Blob | null> => blobPromiseRef.current, []);
+
   return useMemo(() => ({
     isRecording,
     duration,
@@ -150,5 +166,6 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     stopRecording,
     downloadRecording,
     getBlob,
-  }), [isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob]);
+    waitForBlob,
+  }), [isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob, waitForBlob]);
 }
