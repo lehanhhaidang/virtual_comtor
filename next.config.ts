@@ -9,6 +9,12 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: process.env.npm_package_version || '0.0.0',
   },
 
+  // Prevent Next standalone tracing from trying to copy local runtime data folders.
+  // (e.g. persisted Mongo/WiredTiger files in Vcomtor/)
+  outputFileTracingExcludes: {
+    '*': ['Vcomtor/mongodb/**', 'Vcomtor/storage/**'],
+  },
+
   async headers() {
     return [
       {
