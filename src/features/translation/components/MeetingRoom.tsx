@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Wifi, WifiOff, AlertCircle, Loader2, Download, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { exportToXLSX } from '../helpers/exportTranscript';
 import { TranscriptPanel } from './TranscriptPanel';
 import { MeetingControls } from './MeetingControls';
 import { MeetingSummary } from './MeetingSummary';
+import { AudioPlayer } from './AudioPlayer';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 
@@ -42,6 +43,9 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const [isEnded, setIsEnded] = useState(false);
   const [dataKeyRef, setDataKeyRef] = useState<CryptoKey | null>(null);
   const [error, setError] = useState('');
+  // Audio playback sync (post-meeting)
+  const [currentMs, setCurrentMs] = useState(0);
+  const seekToRef = useRef<((ms: number) => void) | null>(null);
 
   const transcript = useTranscript(meetingId);
   const { isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob } = useAudioRecorder();
@@ -266,16 +270,30 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
           entries={transcript.entries}
           currentText={transcript.currentText}
           currentSpeaker={transcript.currentSpeaker}
+          currentMs={isEnded ? currentMs : 0}
+          onSeek={isEnded && seekToRef.current ? (ms) => seekToRef.current!(ms) : undefined}
         />
       </div>
 
       {/* AI Summary — visible immediately after ending */}
       {isEnded && mode === 'standard' && transcript.entries.length > 0 && (
-        <MeetingSummary
-          meetingId={meetingId}
-          entries={transcript.entries}
-          dataKey={dataKeyRef}
-        />
+        <>
+          {/* Audio playback — sync with live entries (startMs/endMs already set) */}
+          {dataKeyRef && (
+            <AudioPlayer
+              meetingId={meetingId}
+              meetingTitle={meetingTitle}
+              dataKey={dataKeyRef}
+              onTimeUpdate={setCurrentMs}
+              seekRef={seekToRef}
+            />
+          )}
+          <MeetingSummary
+            meetingId={meetingId}
+            entries={transcript.entries}
+            dataKey={dataKeyRef}
+          />
+        </>
       )}
 
       {/* Footer stats */}

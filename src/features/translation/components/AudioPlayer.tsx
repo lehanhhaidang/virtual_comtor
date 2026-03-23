@@ -22,7 +22,7 @@ function formatTime(ms: number): string {
 
 /**
  * AudioPlayer — fetches & decrypts meeting audio, renders a styled playback bar.
- * Returns null if no audio is available.
+ * Returns null (hidden) if no audio is available for this meeting.
  */
 export function AudioPlayer({
   meetingId,
@@ -31,22 +31,26 @@ export function AudioPlayer({
   seekRef,
 }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Keep objectUrl in a ref AND state — ref survives cleanup, state drives render
+  const objectUrlRef = useRef<string | null>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'no-audio'>('loading');
   const [playing, setPlaying] = useState(false);
   const [currentMs, setCurrentMs] = useState(0);
   const [durationMs, setDurationMs] = useState(0);
 
-  // Decrypt and create object URL
+  // Decrypt audio and create a stable object URL
   useEffect(() => {
     let cancelled = false;
-    let url: string | null = null;
 
     const load = async () => {
       try {
         const res = await fetch(`/api/meetings/${meetingId}/audio`);
-        if (res.status === 404) { setStatus('no-audio'); return; }
-        if (!res.ok) throw new Error('fetch failed');
+        if (res.status === 404) {
+          if (!cancelled) setStatus('no-audio');
+          return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
         const encrypted = new Uint8Array(await res.arrayBuffer());
         const iv = encrypted.slice(0, 12);
@@ -59,40 +63,58 @@ export function AudioPlayer({
         );
 
         if (cancelled) return;
-        url = URL.createObjectURL(new Blob([decrypted], { type: 'audio/webm' }));
+
+        const url = URL.createObjectURL(new Blob([decrypted], { type: 'audio/webm' }));
+        objectUrlRef.current = url;
         setObjectUrl(url);
         setStatus('ready');
-      } catch {
+      } catch (err) {
+        console.error('[AudioPlayer] load error', err);
         if (!cancelled) setStatus('error');
       }
     };
 
     load();
+
+    // Only revoke on full unmount — NOT on every re-run
     return () => {
       cancelled = true;
-      if (url) URL.revokeObjectURL(url);
     };
   }, [meetingId, dataKey]);
 
-  // Wire seekTo ref
+  // Revoke object URL only when component fully unmounts
   useEffect(() => {
-    if (seekRef) {
-      seekRef.current = (ms: number) => {
-        const audio = audioRef.current;
-        if (!audio) return;
-        audio.currentTime = ms / 1000;
-        audio.play().catch(() => null);
-        setPlaying(true);
-      };
-    }
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // Wire seekTo ref so parent can seek programmatically
+  useEffect(() => {
+    if (!seekRef) return;
+    seekRef.current = (ms: number) => {
+      const audio = audioRef.current;
+      if (!audio) return;
+      audio.currentTime = ms / 1000;
+      audio.play().catch(() => null);
+      setPlaying(true);
+    };
   }, [seekRef]);
 
   const handlePlayPause = useCallback(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    if (playing) { audio.pause(); setPlaying(false); }
-    else { audio.play().catch(() => null); setPlaying(true); }
-  }, [playing]);
+    if (!audio || status !== 'ready') return;
+    if (playing) {
+      audio.pause();
+      setPlaying(false);
+    } else {
+      audio.play().catch(() => null);
+      setPlaying(true);
+    }
+  }, [playing, status]);
 
   const handleSeekBar = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
@@ -102,26 +124,31 @@ export function AudioPlayer({
     setCurrentMs(ms);
   }, []);
 
+  // Not available → render nothing
   if (status === 'no-audio' || status === 'error') return null;
 
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border/40 bg-card/80 px-4 py-3">
-      {/* Hidden audio element */}
+      {/* Audio element — mounted as soon as URL is ready */}
       {objectUrl && (
         <audio
           ref={audioRef}
           src={objectUrl}
+          preload="auto"
           onTimeUpdate={(e) => {
             const ms = (e.currentTarget.currentTime * 1000) | 0;
             setCurrentMs(ms);
             onTimeUpdate?.(ms);
           }}
-          onDurationChange={(e) => setDurationMs((e.currentTarget.duration * 1000) | 0)}
+          onDurationChange={(e) => {
+            const dur = e.currentTarget.duration;
+            if (isFinite(dur)) setDurationMs((dur * 1000) | 0);
+          }}
           onEnded={() => setPlaying(false)}
         />
       )}
 
-      {/* Play / Pause */}
+      {/* Play / Pause button */}
       <Button
         variant="ghost"
         size="icon"
@@ -138,7 +165,7 @@ export function AudioPlayer({
         )}
       </Button>
 
-      {/* Seek bar */}
+      {/* Progress bar + timestamps */}
       <div className="flex flex-1 items-center gap-2 min-w-0">
         <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
           {formatTime(currentMs)}
@@ -146,7 +173,7 @@ export function AudioPlayer({
         <input
           type="range"
           min={0}
-          max={durationMs || 100}
+          max={durationMs || 1}
           value={currentMs}
           onChange={handleSeekBar}
           className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-border accent-primary"

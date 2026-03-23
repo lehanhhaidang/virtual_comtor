@@ -9,6 +9,10 @@ interface TranscriptPanelProps {
   entries: TranscriptEntry[];
   currentText: string;
   currentSpeaker: string;
+  /** Current audio playback position in ms — highlights active entry */
+  currentMs?: number;
+  /** Seek audio to entry startMs when clicked */
+  onSeek?: (startMs: number) => void;
 }
 
 /**
@@ -19,14 +23,24 @@ export const TranscriptPanel = memo(function TranscriptPanel({
   entries,
   currentText,
   currentSpeaker,
+  currentMs = 0,
+  onSeek,
 }: TranscriptPanelProps) {
   const endRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLDivElement | null>(null);
   const { t } = useI18n();
 
-  // Auto-scroll to bottom on new entries or interim updates
+  // Auto-scroll to bottom on new entries or interim updates (live recording)
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [entries, currentText]);
+    if (!onSeek) endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [entries, currentText, onSeek]);
+
+  // Auto-scroll active entry into view during playback
+  useEffect(() => {
+    if (onSeek && currentMs > 0) {
+      activeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [currentMs, onSeek]);
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-border/40 bg-card/95">
@@ -45,9 +59,18 @@ export const TranscriptPanel = memo(function TranscriptPanel({
           </div>
         )}
 
-        {entries.map((entry) => (
-          <TranscriptEntryItem key={entry.id} entry={entry} />
-        ))}
+        {entries.map((entry) => {
+          const isActive = onSeek != null && currentMs >= entry.startMs && currentMs < entry.endMs;
+          return (
+            <div key={entry.id} ref={isActive ? activeRef : null}>
+              <TranscriptEntryItem
+                entry={entry}
+                isActive={isActive}
+                onSeek={onSeek}
+              />
+            </div>
+          );
+        })}
 
         {/* Interim (partial) text */}
         {currentText && (

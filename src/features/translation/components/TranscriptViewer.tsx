@@ -55,6 +55,11 @@ export function TranscriptViewer({
   const seekToRef = useRef<((ms: number) => void) | null>(null);
   const activeEntryRef = useRef<HTMLDivElement | null>(null);
 
+  // Fetch data key eagerly — needed for both transcript decrypt AND audio player
+  useEffect(() => {
+    getDataKey().then((key) => { if (key) setDataKeyRef(key); });
+  }, [getDataKey]);
+
   // Fetch and decrypt entries on mount
   useEffect(() => {
     let cancelled = false;
