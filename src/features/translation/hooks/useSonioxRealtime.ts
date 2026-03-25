@@ -94,6 +94,13 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
         return;
       }
 
+      // Debug: log any "none" tokens (not translated) so we can trace language drift
+      const noneTokens = response.tokens.filter((t) => (t.translation_status || 'none') === 'none');
+      if (noneTokens.length > 0) {
+        const langs = [...new Set(noneTokens.map((t) => t.language || '?'))].join(', ');
+        console.debug(`[Soniox] ${noneTokens.length} token(s) not translated — detected lang: ${langs}`);
+      }
+
       type TokenGroup = {
         speakerId: string;
         language: SonioxLanguage;

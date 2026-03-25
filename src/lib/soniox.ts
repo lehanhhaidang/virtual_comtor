@@ -10,8 +10,12 @@ export const SONIOX_CONFIG = {
   /** Audio format — 'auto' lets Soniox detect */
   audioFormat: 'auto',
 
-  /** Primary languages for the meeting */
-  languageHints: ['ja', 'vi', 'en', 'zh', 'ko'],
+  /**
+   * Language hints — keep tight (only ja + vi).
+   * Adding en/zh/ko causes Soniox to drift into those languages after a while,
+   * resulting in translation_status="none" tokens (no translation produced).
+   */
+  languageHints: ['ja', 'vi'],
 
   /** Enable speaker diarization to distinguish speakers */
   enableSpeakerDiarization: true,
