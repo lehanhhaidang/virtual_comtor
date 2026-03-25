@@ -74,7 +74,7 @@ function MeetingPageContent({ meetingId }: { meetingId: string }) {
           meetingTitle={meeting.title}
           projectId={meeting.projectId}
           mode={meeting.mode ?? 'standard'}
-          languagePairId={meeting.languagePair ?? 'ja-vi'}
+          languagePairId={meeting.languagePair ?? 'ja:vi'}
         />
       </div>
     );

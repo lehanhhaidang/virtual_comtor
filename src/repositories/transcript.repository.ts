@@ -6,7 +6,7 @@ export interface CreateEntryData {
   meetingId: string;
   speakerId: string;
   speakerLabel: string;
-  language: 'ja' | 'vi';
+  language: string;
   originalText: string;
   translatedText: string;
   startMs: number;

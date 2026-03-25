@@ -13,7 +13,7 @@ export interface Meeting {
   startedAt?: string;
   endedAt?: string;
   audioPath?: string;
-  speakerMapping: Record<string, { label: string; language: 'ja' | 'vi' }>;
+  speakerMapping: Record<string, { label: string; language: string }>;
   createdAt: string;
   updatedAt: string;
 }

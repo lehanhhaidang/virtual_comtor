@@ -5,7 +5,7 @@ export type MeetingMode = 'standard' | 'private';
 
 export interface ISpeakerInfo {
   label: string;
-  language: 'ja' | 'vi';
+  language: string; // ISO 639-1 code — open to any Soniox language
 }
 
 export interface IMeeting extends Document {
@@ -31,7 +31,7 @@ export interface IMeeting extends Document {
 const SpeakerInfoSchema = new Schema<ISpeakerInfo>(
   {
     label: { type: String, required: true },
-    language: { type: String, enum: ['ja', 'vi'], required: true },
+    language: { type: String, required: true },
   },
   { _id: false }
 );

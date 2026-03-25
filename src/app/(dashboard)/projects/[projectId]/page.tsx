@@ -26,7 +26,7 @@ import { useI18n } from '@/lib/i18n';
 import { projectApi, type Project } from '@/features/projects/api/projectApi';
 import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/meetings/api/meetingApi';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { LANGUAGE_PAIRS, DEFAULT_LANGUAGE_PAIR_ID } from '@/lib/soniox';
+import { SONIOX_LANGUAGES, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
 
 // ---------------------------------------------------------------------------
 
@@ -56,10 +56,11 @@ export default function ProjectDetailPage({
   const [creating,      setCreating]      = useState(false);
   const [title,         setTitle]         = useState('');
   const [mode,          setMode]          = useState<'standard' | 'private'>('standard');
-  const [languagePair,  setLanguagePair]  = useState(DEFAULT_LANGUAGE_PAIR_ID);
+  const [langA,         setLangA]         = useState(DEFAULT_LANG_A);
+  const [langB,         setLangB]         = useState(DEFAULT_LANG_B);
   const [error,         setError]         = useState('');
 
-  const selectedPair = LANGUAGE_PAIRS.find((p) => p.id === languagePair) ?? LANGUAGE_PAIRS[0];
+  const selectedPair = `${langLabel(langA)} ↔ ${langLabel(langB)}`;
 
   // ---------------------------------------------------------------------------
 
@@ -78,7 +79,8 @@ export default function ProjectDetailPage({
   const resetForm = () => {
     setTitle('');
     setMode('standard');
-    setLanguagePair(DEFAULT_LANGUAGE_PAIR_ID);
+    setLangA(DEFAULT_LANG_A);
+    setLangB(DEFAULT_LANG_B);
     setError('');
   };
 
@@ -90,7 +92,7 @@ export default function ProjectDetailPage({
     setCreating(true);
     setError('');
     try {
-      const data: CreateMeetingData = { title: title.trim(), mode, languagePair };
+      const data: CreateMeetingData = { title: title.trim(), mode, languagePair: pairId(langA, langB) };
       const res = await meetingApi.create(projectId, data);
       if (res.success && 'meeting' in res.data) {
         const newMeetingId = res.data.meeting._id;
@@ -197,36 +199,48 @@ export default function ProjectDetailPage({
                 />
               </div>
 
-              {/* Language pair */}
+              {/* Language pair — 2 dropdowns */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Languages className="h-4 w-4 text-muted-foreground" />
                   <Label className="text-sm font-medium">Cặp ngôn ngữ</Label>
                 </div>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {LANGUAGE_PAIRS.map((pair) => {
-                    const isSelected = languagePair === pair.id;
-                    return (
-                      <button
-                        key={pair.id}
-                        type="button"
-                        onClick={() => setLanguagePair(pair.id)}
-                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition-all ${
-                          isSelected
-                            ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
-                            : 'border-border/50 bg-card/60 text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground'
-                        }`}
-                      >
-                        <span className="text-lg leading-none">{pair.label.split(' ')[0]}</span>
-                        <span className="flex-1 font-medium leading-tight">
-                          {pair.label.replace(/^[^\s]+\s/, '')}
-                        </span>
-                        {isSelected && (
-                          <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-                        )}
-                      </button>
-                    );
-                  })}
+                <div className="flex items-center gap-2">
+                  {/* Lang A */}
+                  <select
+                    value={langA}
+                    onChange={(e) => setLangA(e.target.value)}
+                    className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    {SONIOX_LANGUAGES.map((l) => (
+                      <option key={l.code} value={l.code} disabled={l.code === langB}>
+                        {l.flag ? `${l.flag} ` : ''}{l.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  {/* Swap button */}
+                  <button
+                    type="button"
+                    title="Swap languages"
+                    onClick={() => { setLangA(langB); setLangB(langA); }}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    ⇄
+                  </button>
+
+                  {/* Lang B */}
+                  <select
+                    value={langB}
+                    onChange={(e) => setLangB(e.target.value)}
+                    className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    {SONIOX_LANGUAGES.map((l) => (
+                      <option key={l.code} value={l.code} disabled={l.code === langA}>
+                        {l.flag ? `${l.flag} ` : ''}{l.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -276,7 +290,7 @@ export default function ProjectDetailPage({
             <div className="flex items-center justify-between border-t border-border/40 px-6 py-4">
               {/* Selection summary */}
               <p className="text-xs text-muted-foreground">
-                {selectedPair.label}
+                {selectedPair}
                 <span className="mx-1.5 opacity-40">·</span>
                 {mode === 'standard' ? '📊 Standard' : '🔒 Private'}
               </p>
@@ -333,7 +347,10 @@ export default function ProjectDetailPage({
                       {meeting.languagePair && (
                         <span className="flex items-center gap-1">
                           <Languages className="h-3 w-3" />
-                          {LANGUAGE_PAIRS.find((p) => p.id === meeting.languagePair)?.label ?? meeting.languagePair}
+                          {(() => {
+                            const { langA: a, langB: b } = parsePairId(meeting.languagePair);
+                            return `${langLabel(a)} ↔ ${langLabel(b)}`;
+                          })()}
                         </span>
                       )}
                       <span className="flex items-center gap-1">

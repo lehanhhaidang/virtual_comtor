@@ -7,7 +7,7 @@ export interface TranscriptEntry {
   speakerLabel: string;
   /** 1-indexed speaker number for stable badge color assignment. */
   speakerNumber: number;
-  language: 'ja' | 'vi' | 'en' | 'zh' | 'ko';
+  language: string;
   originalText: string;
   translatedText: string;
   startMs: number;

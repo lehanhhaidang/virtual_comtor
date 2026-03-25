@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { SONIOX_WS_URL, buildSonioxConfig, getLanguagePair, type SonioxLanguage } from '@/lib/soniox';
+import { SONIOX_WS_URL, buildSonioxConfig, parsePairId, type SonioxLanguage } from '@/lib/soniox';
 import type { SonioxResponse } from '@/types/transcript.types';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +38,7 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
   const optionsRef = useRef(options);
   useEffect(() => { optionsRef.current = options; });
 
-  const pair = getLanguagePair(options.languagePairId ?? 'ja-vi');
+  const pair = parsePairId(options.languagePairId ?? 'ja:vi');
 
   const [state, setState] = useState<ConnectionState>('disconnected');
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -178,7 +178,7 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
       ws.onopen = () => {
         ws.send(JSON.stringify({
           api_key: tempKey,
-          ...buildSonioxConfig(pair, sampleRate),
+          ...buildSonioxConfig(pair.langA, pair.langB, sampleRate),
         }));
         resolve();
       };

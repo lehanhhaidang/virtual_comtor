@@ -4,7 +4,7 @@ export type MeetingStatus = 'scheduled' | 'in_progress' | 'completed';
 
 export interface SpeakerInfo {
   label: string;
-  language: 'ja' | 'vi';
+  language: string;
 }
 
 export interface SpeakerMapping {

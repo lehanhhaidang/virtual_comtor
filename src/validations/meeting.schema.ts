@@ -1,7 +1,5 @@
 import { z } from 'zod';
-import { LANGUAGE_PAIRS, DEFAULT_LANGUAGE_PAIR_ID } from '@/lib/soniox';
-
-const PAIR_IDS = LANGUAGE_PAIRS.map((p) => p.id) as [string, ...string[]];
+import { DEFAULT_PAIR_ID } from '@/lib/soniox';
 
 export const createMeetingSchema = z.object({
   title: z
@@ -14,8 +12,9 @@ export const createMeetingSchema = z.object({
     .default('standard')
     .optional(),
   languagePair: z
-    .enum(PAIR_IDS)
-    .default(DEFAULT_LANGUAGE_PAIR_ID)
+    .string()
+    .regex(/^[a-z]{2,3}:[a-z]{2,3}$/, 'Invalid language pair format (expected "xx:xx")')
+    .default(DEFAULT_PAIR_ID)
     .optional(),
 });
 

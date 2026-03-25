@@ -5,7 +5,7 @@ export interface ITranscriptEntry extends Document {
   meetingId: Types.ObjectId;
   speakerId: string;
   speakerLabel: string;
-  language: 'ja' | 'vi';
+  language: string;
   originalText: string;
   translatedText: string;
   startMs: number;
