@@ -24,6 +24,7 @@ import { useI18n } from '@/lib/i18n';
 import { projectApi, type Project } from '@/features/projects/api/projectApi';
 import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/meetings/api/meetingApi';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { LANGUAGE_PAIRS, DEFAULT_LANGUAGE_PAIR_ID } from '@/lib/soniox';
 
 const statusConfig = {
   scheduled: { icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted/50', label: 'Scheduled' },
@@ -50,6 +51,7 @@ export default function ProjectDetailPage({
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   const [mode, setMode] = useState<'standard' | 'private'>('standard');
+  const [languagePair, setLanguagePair] = useState(DEFAULT_LANGUAGE_PAIR_ID);
   const [error, setError] = useState('');
 
   const fetchData = useCallback(async () => {
@@ -77,7 +79,7 @@ export default function ProjectDetailPage({
     setError('');
 
     try {
-      const data: CreateMeetingData = { title: title.trim(), mode };
+      const data: CreateMeetingData = { title: title.trim(), mode, languagePair };
       const res = await meetingApi.create(projectId, data);
       if (res.success && 'meeting' in res.data) {
         const newMeetingId = res.data.meeting._id;
@@ -184,6 +186,27 @@ export default function ProjectDetailPage({
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
                 {t.common.create}
               </Button>
+            </div>
+          </div>
+
+          {/* Language pair selector */}
+          <div className="mt-4 space-y-2">
+            <Label>Cặp ngôn ngữ</Label>
+            <div className="flex flex-wrap gap-2">
+              {LANGUAGE_PAIRS.map((pair) => (
+                <button
+                  key={pair.id}
+                  type="button"
+                  onClick={() => setLanguagePair(pair.id)}
+                  className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
+                    languagePair === pair.id
+                      ? 'border-primary bg-primary/10 text-foreground'
+                      : 'border-border/40 text-muted-foreground hover:border-border hover:text-foreground'
+                  }`}
+                >
+                  {pair.label}
+                </button>
+              ))}
             </div>
           </div>
 

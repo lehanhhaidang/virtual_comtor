@@ -7,6 +7,7 @@ export interface Meeting {
   title: string;
   status: 'scheduled' | 'in_progress' | 'completed';
   mode: 'standard' | 'private';
+  languagePair: string;
   duration?: number;
   entryCount?: number;
   startedAt?: string;
@@ -20,6 +21,7 @@ export interface Meeting {
 export interface CreateMeetingData {
   title: string;
   mode?: 'standard' | 'private';
+  languagePair?: string;
 }
 
 export interface UpdateMeetingData {

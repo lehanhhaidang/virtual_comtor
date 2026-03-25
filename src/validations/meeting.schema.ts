@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { LANGUAGE_PAIRS, DEFAULT_LANGUAGE_PAIR_ID } from '@/lib/soniox';
+
+const PAIR_IDS = LANGUAGE_PAIRS.map((p) => p.id) as [string, ...string[]];
 
 export const createMeetingSchema = z.object({
   title: z
@@ -9,6 +12,10 @@ export const createMeetingSchema = z.object({
   mode: z
     .enum(['standard', 'private'])
     .default('standard')
+    .optional(),
+  languagePair: z
+    .enum(PAIR_IDS)
+    .default(DEFAULT_LANGUAGE_PAIR_ID)
     .optional(),
 });
 

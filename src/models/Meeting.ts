@@ -15,6 +15,7 @@ export interface IMeeting extends Document {
   title: string;
   status: MeetingStatus;
   mode: MeetingMode;
+  languagePair: string;
   duration?: number;
   entryCount?: number;
   startedAt?: Date;
@@ -64,6 +65,10 @@ const MeetingSchema = new Schema<IMeeting>(
       type: String,
       enum: ['standard', 'private'],
       default: 'standard',
+    },
+    languagePair: {
+      type: String,
+      default: 'ja-vi',
     },
     duration: { type: Number },
     entryCount: { type: Number },

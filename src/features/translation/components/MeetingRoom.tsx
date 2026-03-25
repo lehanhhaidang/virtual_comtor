@@ -26,6 +26,7 @@ interface MeetingRoomProps {
   meetingTitle: string;
   projectId?: string;
   mode?: 'standard' | 'private';
+  languagePairId?: string;
 }
 
 const CONNECTION_STATUS_COLORS = {
@@ -51,7 +52,7 @@ const CONNECTION_STATUS_COLORS = {
  *   - useImportMeeting   — background import job
  *   - helpers/audioUpload — encrypt + chunked upload
  */
-export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standard' }: MeetingRoomProps) {
+export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standard', languagePairId = 'ja-vi' }: MeetingRoomProps) {
   const router = useRouter();
   const { t } = useI18n();
   const { getDataKey } = useAuth();
@@ -79,6 +80,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const transcript = useTranscript(meetingId);
 
   const soniox = useSonioxRealtime({
+    languagePairId,
     onFinalTokens: transcript.addEntry,
     onInterimTokens: transcript.updateInterim,
     onTranslationOnly: transcript.updateLastTranslation,

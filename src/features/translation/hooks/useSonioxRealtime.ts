@@ -1,12 +1,13 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { SONIOX_CONFIG, SONIOX_WS_URL, type SonioxLanguage } from '@/lib/soniox';
+import { SONIOX_WS_URL, buildSonioxConfig, getLanguagePair, type SonioxLanguage } from '@/lib/soniox';
 import type { SonioxResponse } from '@/types/transcript.types';
 
 // ---------------------------------------------------------------------------
 
 interface UseSonioxRealtimeOptions {
+  languagePairId?: string;
   onFinalTokens: (
     speakerId: string,
     language: SonioxLanguage,
@@ -36,6 +37,8 @@ type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
   const optionsRef = useRef(options);
   useEffect(() => { optionsRef.current = options; });
+
+  const pair = getLanguagePair(options.languagePairId ?? 'ja-vi');
 
   const [state, setState] = useState<ConnectionState>('disconnected');
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -175,18 +178,7 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
       ws.onopen = () => {
         ws.send(JSON.stringify({
           api_key: tempKey,
-          model: SONIOX_CONFIG.model,
-          audio_format: 'pcm_s16le',
-          sample_rate: sampleRate,
-          num_channels: 1,
-          language_hints: SONIOX_CONFIG.languageHints,
-          enable_speaker_diarization: SONIOX_CONFIG.enableSpeakerDiarization,
-          enable_language_identification: SONIOX_CONFIG.enableLanguageIdentification,
-          translation: {
-            type: SONIOX_CONFIG.translation.type,
-            language_a: SONIOX_CONFIG.translation.language_a,
-            language_b: SONIOX_CONFIG.translation.language_b,
-          },
+          ...buildSonioxConfig(pair, sampleRate),
         }));
         resolve();
       };
@@ -195,7 +187,7 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
 
     ws.onmessage = handleMessage;
     return ws;
-  }, [handleMessage]);
+  }, [handleMessage, pair]);
 
   /** Tear down audio graph + WS, without touching isLiveRef. */
   const teardown = useCallback(() => {
