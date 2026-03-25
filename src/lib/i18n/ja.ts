@@ -107,6 +107,7 @@ export const ja: TranslationSet = {
     connected: '接続済み',
     confirmLeave: '会議が進行中です。退出しますか？',
     startMeeting: '開始',
+    importMeeting: 'インポート',
     endMeeting: '終了',
     downloadAudio: '音声ダウンロード',
     exportCSV: 'CSVエクスポート',

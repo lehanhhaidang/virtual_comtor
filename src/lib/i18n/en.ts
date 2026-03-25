@@ -107,6 +107,7 @@ export const en: TranslationSet = {
     connected: 'Connected',
     confirmLeave: 'Meeting is in progress. Do you want to leave?',
     startMeeting: 'Start',
+    importMeeting: 'Import',
     endMeeting: 'End',
     downloadAudio: 'Download Audio',
     exportCSV: 'Export CSV',

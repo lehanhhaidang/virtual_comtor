@@ -107,6 +107,7 @@ export interface TranslationSet {
     connected: string;
     confirmLeave: string;
     startMeeting: string;
+    importMeeting: string;
     endMeeting: string;
     downloadAudio: string;
     exportCSV: string;

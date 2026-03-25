@@ -107,6 +107,7 @@ export const vi: TranslationSet = {
     connected: 'Đã kết nối',
     confirmLeave: 'Cuộc họp đang diễn ra. Bạn muốn rời đi?',
     startMeeting: 'Bắt đầu',
+    importMeeting: 'Import',
     endMeeting: 'Kết thúc',
     downloadAudio: 'Tải âm thanh',
     exportCSV: 'Xuất CSV',
