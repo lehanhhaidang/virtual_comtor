@@ -47,6 +47,10 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const [dataKeyRef, setDataKeyRef] = useState<CryptoKey | null>(null);
   const [error, setError] = useState('');
   const [showImport, setShowImport] = useState(false);
+  // Import background job state
+  const [importStatus, setImportStatus] = useState<'idle' | 'uploading' | 'transcribing' | 'saving' | 'done' | 'error'>('idle');
+  const [importProgress, setImportProgress] = useState('');
+  const isImporting = importStatus !== 'idle' && importStatus !== 'done' && importStatus !== 'error';
   // Audio playback sync (post-meeting)
   const [currentMs, setCurrentMs] = useState(0);
   const seekToRef = useRef<((ms: number) => void) | null>(null);
@@ -67,30 +71,6 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
     connected: t.meeting.connected,
     error: t.common.error,
   }), [t]);
-
-  const uploadEncryptedAudioChunked = useCallback(async (bytes: Uint8Array) => {
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
-    let offset = 0;
-    while (offset < bytes.length) {
-      const end = Math.min(bytes.length, offset + CHUNK_SIZE);
-      const chunk = bytes.slice(offset, end);
-      const isFinal = end >= bytes.length;
-
-      const res = await fetch(`/api/meetings/${meetingId}/audio/chunk`, {
-        method: 'POST',
-        headers: {
-          'x-upload-offset': String(offset),
-          'x-upload-final': isFinal ? '1' : '0',
-        },
-        body: chunk,
-      });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(`Audio upload failed (${res.status}) ${text}`);
-      }
-      offset = end;
-    }
-  }, [meetingId]);
 
   const encryptAudioToBytes = useCallback(async (blob: Blob, dataKey: CryptoKey) => {
     const arrayBuffer = await blob.arrayBuffer();
@@ -208,7 +188,24 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
 
         if (blob && blob.size > 0) {
           const combined = await encryptAudioToBytes(blob, dataKey);
-          await uploadEncryptedAudioChunked(combined);
+          // Chunked upload
+          const CHUNK_SIZE = 5 * 1024 * 1024;
+          let offset = 0;
+          while (offset < combined.length) {
+            const end = Math.min(combined.length, offset + CHUNK_SIZE);
+            const chunk = combined.slice(offset, end);
+            const isFinal = end >= combined.length;
+            const res = await fetch(`/api/meetings/${meetingId}/audio/chunk`, {
+              method: 'POST',
+              headers: {
+                'x-upload-offset': String(offset),
+                'x-upload-final': isFinal ? '1' : '0',
+              },
+              body: chunk,
+            });
+            if (!res.ok) throw new Error(`Audio upload failed (${res.status})`);
+            offset = end;
+          }
         }
       } catch {
         setError('Failed to save meeting data.');
@@ -217,7 +214,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
 
     await meetingApi.update(meetingId, { status: 'completed' });
     setIsEnded(true);
-  }, [meetingId, soniox, stopRecording, waitForBlob, transcript, mode, getDataKey, encryptAudioToBytes, uploadEncryptedAudioChunked]);
+  }, [meetingId, soniox, stopRecording, waitForBlob, transcript, mode, getDataKey, encryptAudioToBytes]);
 
   /**
    * Navigate back; prompts confirmation when a meeting is active.
@@ -267,7 +264,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
           isEnded={isEnded}
           connectionState={soniox.state}
           onStart={handleStart}
-          onImport={() => setShowImport(true)}
+          onImport={() => { if (!isImporting) setShowImport(true); }}
           onPause={handlePause}
           onResume={handleResume}
           onStop={handleStop}
@@ -282,6 +279,14 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         </div>
       )}
 
+      {/* Import progress banner */}
+      {isImporting && (
+        <div className="flex items-center gap-3 rounded-xl border border-vietnamese/30 bg-vietnamese/10 px-4 py-3 text-sm text-vietnamese">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <span className="flex-1 truncate">{importProgress || 'Đang import...'}</span>
+        </div>
+      )}
+
       <ImportMeetingDialog
         open={showImport}
         onClose={() => setShowImport(false)}
@@ -293,31 +298,86 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
           if (!dataKey) throw new Error('Encryption key not available');
           setDataKeyRef(dataKey);
 
-          // 1) If XLSX provided: import transcript directly
-          if (xlsxArrayBuffer) {
-            const imported = parseImportedXlsx(xlsxArrayBuffer);
-            transcript.replaceEntries(imported);
-            await transcript.saveToServer(() => Promise.resolve(dataKey));
-          }
+          // Close dialog immediately — run import in background
+          setShowImport(false);
 
-          // 2) Upload audio (if any)
-          if (audioFile) {
-            const combined = await encryptAudioToBytes(audioFile, dataKey);
-            await uploadEncryptedAudioChunked(combined);
-          }
+          // Run async in background (fire-and-forget, state updates drive UI)
+          (async () => {
+            try {
+              // --- XLSX import: stream entries in small batches so UI updates gradually ---
+              if (xlsxArrayBuffer) {
+                setImportStatus('transcribing');
+                setImportProgress('Đang load transcript...');
+                const allEntries = parseImportedXlsx(xlsxArrayBuffer);
+                const BATCH = 20;
+                for (let i = 0; i < allEntries.length; i += BATCH) {
+                  const slice = allEntries.slice(0, i + BATCH);
+                  transcript.replaceEntries(slice);
+                  setImportProgress(`Đang load transcript… ${Math.min(i + BATCH, allEntries.length)}/${allEntries.length}`);
+                  // Yield to React to re-render
+                  await new Promise((r) => setTimeout(r, 30));
+                }
+              }
 
-          // 3) If only audio (no XLSX): run Soniox to re-transcribe
-          if (audioFile && !xlsxArrayBuffer) {
-            setIsActive(true);
-            await soniox.startFromFile(audioFile);
-            setIsActive(false);
+              // --- Audio upload ---
+              if (audioFile) {
+                setImportStatus('uploading');
+                const totalMB = (audioFile.size / 1024 / 1024).toFixed(1);
+                setImportProgress(`Đang upload audio (${totalMB}MB)…`);
+                const combined = await encryptAudioToBytes(audioFile, dataKey);
 
-            transcript.clearInterim();
-            await transcript.saveToServer(() => Promise.resolve(dataKey));
-          }
+                // Chunked upload with progress
+                const CHUNK_SIZE = 5 * 1024 * 1024;
+                let offset = 0;
+                while (offset < combined.length) {
+                  const end = Math.min(combined.length, offset + CHUNK_SIZE);
+                  const chunk = combined.slice(offset, end);
+                  const isFinal = end >= combined.length;
+                  const res = await fetch(`/api/meetings/${meetingId}/audio/chunk`, {
+                    method: 'POST',
+                    headers: {
+                      'x-upload-offset': String(offset),
+                      'x-upload-final': isFinal ? '1' : '0',
+                    },
+                    body: chunk,
+                  });
+                  if (!res.ok) {
+                    const txt = await res.text().catch(() => '');
+                    throw new Error(`Audio upload failed (${res.status}) ${txt}`);
+                  }
+                  offset = end;
+                  const pct = Math.round((offset / combined.length) * 100);
+                  setImportProgress(`Đang upload audio… ${pct}%`);
+                }
+              }
 
-          await meetingApi.update(meetingId, { status: 'completed' });
-          setIsEnded(true);
+              // --- Audio-only: re-transcribe via Soniox (entries stream in real-time) ---
+              if (audioFile && !xlsxArrayBuffer) {
+                setImportStatus('transcribing');
+                setImportProgress('Đang phân tích audio qua Soniox…');
+                setIsActive(true);
+                await soniox.startFromFile(audioFile);
+                setIsActive(false);
+                transcript.clearInterim();
+              }
+
+              // --- Save transcript to server ---
+              if (transcript.entries.length > 0 || xlsxArrayBuffer) {
+                setImportStatus('saving');
+                setImportProgress('Đang lưu transcript…');
+                await transcript.saveToServer(() => Promise.resolve(dataKey));
+              }
+
+              await meetingApi.update(meetingId, { status: 'completed' });
+              setIsEnded(true);
+              setImportStatus('done');
+              setImportProgress('');
+            } catch (e) {
+              setImportStatus('error');
+              setImportProgress('');
+              setError(e instanceof Error ? e.message : 'Import thất bại');
+            }
+          })();
         }}
       />
 
