@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 export interface ImportMeetingDialogProps {
   open: boolean;

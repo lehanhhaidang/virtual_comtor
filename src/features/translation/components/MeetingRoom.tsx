@@ -52,7 +52,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const seekToRef = useRef<((ms: number) => void) | null>(null);
 
   const transcript = useTranscript(meetingId);
-  const { isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, getBlob, waitForBlob } = useAudioRecorder();
+  const { isRecording, duration, hasRecording, startRecording, stopRecording, downloadRecording, waitForBlob } = useAudioRecorder();
 
   const soniox = useSonioxRealtime({
     onFinalTokens: transcript.addEntry,
@@ -162,7 +162,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
     await soniox.start();
   }, [soniox]);
 
-  // Start recording when stream becomes available after soniox.start()
+  // Only start recording when in live mic mode (stream exists)
   useEffect(() => {
     if (isActive && soniox.stream && !isRecording) {
       startRecording(soniox.stream);
@@ -217,7 +217,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
 
     await meetingApi.update(meetingId, { status: 'completed' });
     setIsEnded(true);
-  }, [meetingId, soniox, stopRecording, waitForBlob, transcript, mode, getDataKey]);
+  }, [meetingId, soniox, stopRecording, waitForBlob, transcript, mode, getDataKey, encryptAudioToBytes, uploadEncryptedAudioChunked]);
 
   /**
    * Navigate back; prompts confirmation when a meeting is active.
