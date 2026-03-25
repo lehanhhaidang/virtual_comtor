@@ -16,6 +16,8 @@ import {
   Clock,
   Shield,
   BarChart3,
+  Languages,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,15 +28,16 @@ import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/mee
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { LANGUAGE_PAIRS, DEFAULT_LANGUAGE_PAIR_ID } from '@/lib/soniox';
 
-const statusConfig = {
-  scheduled: { icon: Clock, color: 'text-muted-foreground', bg: 'bg-muted/50', label: 'Scheduled' },
-  in_progress: { icon: Play, color: 'text-japanese', bg: 'bg-japanese/10', label: 'In Progress' },
-  completed: { icon: CheckCircle, color: 'text-vietnamese', bg: 'bg-vietnamese/10', label: 'Completed' },
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG = {
+  scheduled:   { icon: Clock,        color: 'text-muted-foreground', bg: 'bg-muted/50',        label: 'Scheduled'    },
+  in_progress: { icon: Play,         color: 'text-japanese',         bg: 'bg-japanese/10',     label: 'In Progress'  },
+  completed:   { icon: CheckCircle,  color: 'text-vietnamese',       bg: 'bg-vietnamese/10',   label: 'Completed'    },
 };
 
-/**
- * Project detail page — project info + meetings list.
- */
+// ---------------------------------------------------------------------------
+
 export default function ProjectDetailPage({
   params,
 }: {
@@ -44,46 +47,53 @@ export default function ProjectDetailPage({
   const router = useRouter();
   const { t } = useI18n();
 
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject]   = useState<Project | null>(null);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [title, setTitle] = useState('');
-  const [mode, setMode] = useState<'standard' | 'private'>('standard');
-  const [languagePair, setLanguagePair] = useState(DEFAULT_LANGUAGE_PAIR_ID);
-  const [error, setError] = useState('');
+  const [loading, setLoading]   = useState(true);
+
+  // Create-meeting modal state
+  const [showCreate,    setShowCreate]    = useState(false);
+  const [creating,      setCreating]      = useState(false);
+  const [title,         setTitle]         = useState('');
+  const [mode,          setMode]          = useState<'standard' | 'private'>('standard');
+  const [languagePair,  setLanguagePair]  = useState(DEFAULT_LANGUAGE_PAIR_ID);
+  const [error,         setError]         = useState('');
+
+  const selectedPair = LANGUAGE_PAIRS.find((p) => p.id === languagePair) ?? LANGUAGE_PAIRS[0];
+
+  // ---------------------------------------------------------------------------
 
   const fetchData = useCallback(async () => {
     const [projRes, meetRes] = await Promise.all([
       projectApi.getById(projectId),
       meetingApi.getByProject(projectId),
     ]);
-
-    if (projRes.success && 'project' in projRes.data) {
-      setProject(projRes.data.project);
-    }
-    if (meetRes.success && 'meetings' in meetRes.data) {
-      setMeetings(meetRes.data.meetings);
-    }
+    if (projRes.success && 'project' in projRes.data) setProject(projRes.data.project);
+    if (meetRes.success && 'meetings' in meetRes.data) setMeetings(meetRes.data.meetings);
     setLoading(false);
   }, [projectId]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const resetForm = () => {
+    setTitle('');
+    setMode('standard');
+    setLanguagePair(DEFAULT_LANGUAGE_PAIR_ID);
+    setError('');
+  };
+
+  const handleOpenCreate = () => { resetForm(); setShowCreate(true); };
+  const handleCloseCreate = () => setShowCreate(false);
 
   const handleCreate = async () => {
     if (!title.trim()) return;
     setCreating(true);
     setError('');
-
     try {
       const data: CreateMeetingData = { title: title.trim(), mode, languagePair };
       const res = await meetingApi.create(projectId, data);
       if (res.success && 'meeting' in res.data) {
         const newMeetingId = res.data.meeting._id;
-        // Set status to in_progress immediately and navigate
         await meetingApi.update(newMeetingId, { status: 'in_progress' });
         router.push(`/meetings/${newMeetingId}`);
       } else {
@@ -102,6 +112,8 @@ export default function ProjectDetailPage({
     fetchData();
   };
 
+  // ---------------------------------------------------------------------------
+
   if (loading) return <LoadingSpinner label={t.common.loading} />;
   if (!project) {
     return (
@@ -116,7 +128,8 @@ export default function ProjectDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Back + Header */}
+
+      {/* ── Header ── */}
       <div>
         <Link
           href="/projects"
@@ -125,132 +138,169 @@ export default function ProjectDetailPage({
           <ArrowLeft className="h-4 w-4" />
           {t.dashboard.projects}
         </Link>
+
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{project.name}</h1>
             {project.clientName && (
               <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
-                <Users className="h-4 w-4" />
-                {project.clientName}
+                <Users className="h-4 w-4" /> {project.clientName}
               </p>
             )}
             {project.description && (
               <p className="mt-2 text-sm text-muted-foreground">{project.description}</p>
             )}
           </div>
-          <Button
-            onClick={() => setShowCreate(!showCreate)}
-            className="gap-2 rounded-xl"
-          >
+
+          <Button onClick={handleOpenCreate} className="gap-2 rounded-xl">
             <Plus className="h-4 w-4" />
             {t.dashboard.newMeeting}
           </Button>
         </div>
       </div>
 
-      {/* Create meeting form */}
+      {/* ── Create meeting modal overlay ── */}
       {showCreate && (
-        <div className="rounded-2xl border border-primary/20 bg-card/90 p-6 shadow-lg backdrop-blur-sm">
-          <h2 className="mb-4 text-lg font-semibold">{t.dashboard.newMeeting}</h2>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center">
+          <div className="w-full max-w-lg overflow-hidden rounded-t-3xl border border-border/60 bg-card shadow-2xl sm:rounded-3xl">
 
-          {error && (
-            <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
-            <div className="flex-1 space-y-2">
-              <Label>{t.dashboard.meetingTitle} *</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Cuộc họp Sprint Review"
-                className="h-11 rounded-xl"
-                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-              />
-            </div>
-            <div className="flex items-end gap-2 sm:self-end">
-              <Button
-                variant="ghost"
-                onClick={() => setShowCreate(false)}
-                className="rounded-xl"
+            {/* Modal header */}
+            <div className="flex items-center justify-between border-b border-border/40 px-6 py-4">
+              <h2 className="text-base font-semibold">{t.dashboard.newMeeting}</h2>
+              <button
+                onClick={handleCloseCreate}
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                {t.common.cancel}
-              </Button>
-              <Button
-                onClick={handleCreate}
-                disabled={creating || !title.trim()}
-                className="gap-2 rounded-xl"
-              >
-                {creating && <Loader2 className="h-4 w-4 animate-spin" />}
-                {t.common.create}
-              </Button>
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          </div>
 
-          {/* Language pair selector */}
-          <div className="mt-4 space-y-2">
-            <Label>Cặp ngôn ngữ</Label>
-            <div className="flex flex-wrap gap-2">
-              {LANGUAGE_PAIRS.map((pair) => (
-                <button
-                  key={pair.id}
-                  type="button"
-                  onClick={() => setLanguagePair(pair.id)}
-                  className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all ${
-                    languagePair === pair.id
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border/40 text-muted-foreground hover:border-border hover:text-foreground'
-                  }`}
+            <div className="space-y-6 px-6 py-5">
+
+              {/* Error */}
+              {error && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
+
+              {/* Title */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">{t.dashboard.meetingTitle} *</Label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Cuộc họp Sprint Review..."
+                  className="h-11 rounded-xl"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+                />
+              </div>
+
+              {/* Language pair */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Languages className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Cặp ngôn ngữ</Label>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {LANGUAGE_PAIRS.map((pair) => {
+                    const isSelected = languagePair === pair.id;
+                    return (
+                      <button
+                        key={pair.id}
+                        type="button"
+                        onClick={() => setLanguagePair(pair.id)}
+                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-left text-sm transition-all ${
+                          isSelected
+                            ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
+                            : 'border-border/50 bg-card/60 text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground'
+                        }`}
+                      >
+                        <span className="text-lg leading-none">{pair.label.split(' ')[0]}</span>
+                        <span className="flex-1 font-medium leading-tight">
+                          {pair.label.replace(/^[^\s]+\s/, '')}
+                        </span>
+                        {isSelected && (
+                          <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Mode */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium">Chế độ</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    {
+                      id: 'standard',
+                      icon: BarChart3,
+                      title: t.meeting.modeStandard ?? 'Standard',
+                      desc: t.meeting.modeStandardDesc ?? 'Transcript được mã hoá & lưu lại',
+                    },
+                    {
+                      id: 'private',
+                      icon: Shield,
+                      title: t.meeting.modePrivate ?? 'Private',
+                      desc: t.meeting.modePrivateDesc ?? 'Không lưu dữ liệu sau cuộc họp',
+                    },
+                  ] as const).map(({ id, icon: Icon, title: mTitle, desc }) => {
+                    const isSelected = mode === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setMode(id)}
+                        className={`flex flex-col items-start gap-1.5 rounded-2xl border px-4 py-3 text-left transition-all ${
+                          isSelected
+                            ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
+                            : 'border-border/50 bg-card/60 text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium">
+                          <Icon className="h-4 w-4" />
+                          {mTitle}
+                        </span>
+                        <span className="text-xs leading-snug text-muted-foreground">{desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between border-t border-border/40 px-6 py-4">
+              {/* Selection summary */}
+              <p className="text-xs text-muted-foreground">
+                {selectedPair.label}
+                <span className="mx-1.5 opacity-40">·</span>
+                {mode === 'standard' ? '📊 Standard' : '🔒 Private'}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={handleCloseCreate} className="rounded-xl">
+                  {t.common.cancel}
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={creating || !title.trim()}
+                  className="gap-2 rounded-xl"
                 >
-                  {pair.label}
-                </button>
-              ))}
+                  {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {t.common.create}
+                </Button>
+              </div>
             </div>
-          </div>
 
-          {/* Meeting mode toggle */}
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => setMode('standard')}
-              className={`flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-all ${
-                mode === 'standard'
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border/40 text-muted-foreground hover:border-border hover:text-foreground'
-              }`}
-            >
-              <span className="flex items-center gap-2 text-sm font-medium">
-                <BarChart3 className="h-4 w-4" />
-                {t.meeting.modeStandard ?? 'Standard'}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t.meeting.modeStandardDesc ?? 'Transcript is E2E encrypted and saved'}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('private')}
-              className={`flex flex-col items-start gap-1 rounded-lg border px-4 py-3 text-left transition-all ${
-                mode === 'private'
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border/40 text-muted-foreground hover:border-border hover:text-foreground'
-              }`}
-            >
-              <span className="flex items-center gap-2 text-sm font-medium">
-                <Shield className="h-4 w-4" />
-                {t.meeting.modePrivate ?? 'Private'}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t.meeting.modePrivateDesc ?? 'No data saved after the meeting'}
-              </span>
-            </button>
           </div>
         </div>
       )}
 
-      {/* Meetings list */}
+      {/* ── Meetings list ── */}
       <div>
         <h2 className="mb-4 text-lg font-semibold">
           {t.dashboard.meetings} ({meetings.length})
@@ -264,22 +314,28 @@ export default function ProjectDetailPage({
         ) : (
           <div className="space-y-3">
             {meetings.map((meeting) => {
-              const status = statusConfig[meeting.status];
-              const StatusIcon = status.icon;
+              const cfg = STATUS_CONFIG[meeting.status];
+              const StatusIcon = cfg.icon;
 
               return (
                 <div
                   key={meeting._id}
                   className="group flex items-center gap-4 rounded-xl border border-border/40 bg-card/80 p-4 transition-all hover:border-primary/30"
                 >
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${status.bg}`}>
-                    <StatusIcon className={`h-5 w-5 ${status.color}`} />
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${cfg.bg}`}>
+                    <StatusIcon className={`h-5 w-5 ${cfg.color}`} />
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <h3 className="font-medium">{meeting.title}</h3>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <span className={status.color}>{status.label}</span>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      <span className={cfg.color}>{cfg.label}</span>
+                      {meeting.languagePair && (
+                        <span className="flex items-center gap-1">
+                          <Languages className="h-3 w-3" />
+                          {LANGUAGE_PAIRS.find((p) => p.id === meeting.languagePair)?.label ?? meeting.languagePair}
+                        </span>
+                      )}
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
                         {new Date(meeting.createdAt).toLocaleDateString()}
@@ -291,16 +347,14 @@ export default function ProjectDetailPage({
                     {meeting.status === 'scheduled' && (
                       <Link href={`/meetings/${meeting._id}`}>
                         <Button size="sm" className="gap-1 rounded-lg">
-                          <Play className="h-3 w-3" />
-                          {t.dashboard.startMeeting}
+                          <Play className="h-3 w-3" /> {t.dashboard.startMeeting}
                         </Button>
                       </Link>
                     )}
                     {meeting.status === 'in_progress' && (
                       <Link href={`/meetings/${meeting._id}`}>
                         <Button size="sm" variant="outline" className="gap-1 rounded-lg border-japanese/30 text-japanese">
-                          <Play className="h-3 w-3" />
-                          Đang diễn ra
+                          <Play className="h-3 w-3" /> Đang diễn ra
                         </Button>
                       </Link>
                     )}
@@ -311,6 +365,7 @@ export default function ProjectDetailPage({
                         </Button>
                       </Link>
                     )}
+
                     <Button
                       variant="ghost"
                       size="icon"
@@ -326,6 +381,7 @@ export default function ProjectDetailPage({
           </div>
         )}
       </div>
+
     </div>
   );
 }
