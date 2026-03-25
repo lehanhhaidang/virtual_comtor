@@ -188,48 +188,27 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
     []
   );
 
-  /**
-   * Start real-time transcription: connect WebSocket + stream mic audio.
-   */
-  const start = useCallback(async () => {
-    setState('connecting');
+  const sendPcmAsInt16 = useCallback((ws: WebSocket, float32: Float32Array) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    ws.send(int16.buffer);
+  }, []);
 
-    try {
-      // Get temp key
-      const tempKey = await getTempKey();
-      if (!tempKey) {
-        setState('error');
-        return;
-      }
+  const connect = useCallback(async (tempKey: string, sampleRate: number) => {
+    const ws = new WebSocket(SONIOX_WS_URL);
+    wsRef.current = ws;
 
-      // Request mic
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
-      });
-      streamRef.current = micStream;
-      setStream(micStream);
-
-      // Connect to Soniox WebSocket (bare URL, config sent as first message)
-      const ws = new WebSocket(SONIOX_WS_URL);
-      wsRef.current = ws;
-
+    await new Promise<void>((resolve, reject) => {
       ws.onopen = () => {
-        // Create AudioContext first to get actual sample rate
-        const audioContext = new AudioContext();
-        contextRef.current = audioContext;
-        const actualSampleRate = audioContext.sampleRate;
-        console.log('[Soniox] AudioContext sample rate:', actualSampleRate);
-
-        // Send config as first JSON message (Soniox protocol)
         const config = {
           api_key: tempKey,
           model: SONIOX_CONFIG.model,
           audio_format: 'pcm_s16le',
-          sample_rate: actualSampleRate,
+          sample_rate: sampleRate,
           num_channels: 1,
           language_hints: SONIOX_CONFIG.languageHints,
           enable_speaker_diarization: SONIOX_CONFIG.enableSpeakerDiarization,
@@ -240,51 +219,128 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
             language_b: SONIOX_CONFIG.translation.language_b,
           },
         };
-        console.log('[Soniox] Sending config:', JSON.stringify(config, null, 2));
         ws.send(JSON.stringify(config));
-
         setState('connected');
-
-        // Set up audio processing
-        const source = audioContext.createMediaStreamSource(micStream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-        processorRef.current = processor;
-
-        processor.onaudioprocess = (e) => {
-          if (ws.readyState !== WebSocket.OPEN) return;
-          const inputData = e.inputBuffer.getChannelData(0);
-          // Convert Float32 to Int16
-          const int16 = new Int16Array(inputData.length);
-          for (let i = 0; i < inputData.length; i++) {
-            const s = Math.max(-1, Math.min(1, inputData[i]));
-            int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          }
-          ws.send(int16.buffer);
-        };
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
+        resolve();
       };
+      ws.onerror = () => reject(new Error('WebSocket connection error'));
+    });
 
-      ws.onmessage = handleMessage;
+    ws.onmessage = handleMessage;
+    ws.onclose = () => setState('disconnected');
 
-      ws.onerror = () => {
+    return ws;
+  }, [handleMessage]);
+
+  /**
+   * Start real-time transcription from microphone.
+   */
+  const start = useCallback(async () => {
+    setState('connecting');
+
+    try {
+      const tempKey = await getTempKey();
+      if (!tempKey) {
         setState('error');
-        optionsRef.current.onError('WebSocket connection error');
+        return;
+      }
+
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      streamRef.current = micStream;
+      setStream(micStream);
+
+      const audioContext = new AudioContext();
+      contextRef.current = audioContext;
+
+      const ws = await connect(tempKey, audioContext.sampleRate);
+
+      const source = audioContext.createMediaStreamSource(micStream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        sendPcmAsInt16(ws, inputData);
       };
 
-      ws.onclose = () => {
-        setState('disconnected');
-      };
+      source.connect(processor);
+      processor.connect(audioContext.destination);
     } catch (err) {
       setState('error');
       optionsRef.current.onError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to start transcription'
+        err instanceof Error ? err.message : 'Failed to start transcription'
       );
     }
-  }, [getTempKey, handleMessage]);
+  }, [connect, getTempKey, sendPcmAsInt16]);
+
+  /**
+   * Start transcription from an imported audio file.
+   * Browser decodes audio → we stream PCM to Soniox over WebSocket.
+   */
+  const startFromFile = useCallback(async (file: File): Promise<void> => {
+    setState('connecting');
+
+    try {
+      const tempKey = await getTempKey();
+      if (!tempKey) {
+        setState('error');
+        return;
+      }
+
+      // No mic stream in file mode
+      streamRef.current = null;
+      setStream(null);
+
+      const audioContext = new AudioContext();
+      contextRef.current = audioContext;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+
+      const ws = await connect(tempKey, audioContext.sampleRate);
+
+      // Resolve when WS closes (Soniox flush finished)
+      const closed = new Promise<void>((resolve) => {
+        ws.addEventListener('close', () => resolve(), { once: true });
+      });
+
+      const source = audioContext.createBufferSource();
+      source.buffer = audioBuffer;
+
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        sendPcmAsInt16(ws, inputData);
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      // Start playback (real-time streaming)
+      source.start(0);
+      source.onended = () => {
+        // Allow Soniox to flush remaining tokens, then close
+        setTimeout(() => {
+          ws.close();
+        }, 800);
+      };
+
+      await closed;
+    } catch (err) {
+      setState('error');
+      optionsRef.current.onError(
+        err instanceof Error ? err.message : 'Failed to start file transcription'
+      );
+    }
+  }, [connect, getTempKey, sendPcmAsInt16]);
 
   /**
    * Stop transcription.
@@ -311,5 +367,5 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
     };
   }, [stop]);
 
-  return useMemo(() => ({ state, start, stop, stream }), [state, start, stop, stream]);
+  return useMemo(() => ({ state, start, startFromFile, stop, stream }), [state, start, startFromFile, stop, stream]);
 }

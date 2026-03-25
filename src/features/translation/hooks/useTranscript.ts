@@ -100,10 +100,21 @@ export function useTranscript(meetingId: string) {
   }, []);
 
   /**
+   * Replace transcript entries (used for import).
+   */
+  const replaceEntries = useCallback((nextEntries: TranscriptEntry[]) => {
+    setEntries(nextEntries);
+    entriesRef.current = nextEntries;
+    setCurrentText('');
+    setCurrentSpeaker('');
+  }, []);
+
+  /**
    * Reset transcript (new meeting session).
    */
   const reset = useCallback(() => {
     setEntries([]);
+    entriesRef.current = [];
     setCurrentText('');
     setCurrentSpeaker('');
     labelerRef.current.reset();
@@ -165,7 +176,8 @@ export function useTranscript(meetingId: string) {
     updateInterim,
     clearInterim,
     getSpeakerMapping,
+    replaceEntries,
     reset,
     saveToServer,
-  }), [entries, currentText, currentSpeaker, addEntry, updateLastTranslation, updateInterim, clearInterim, getSpeakerMapping, reset, saveToServer]);
+  }), [entries, currentText, currentSpeaker, addEntry, updateLastTranslation, updateInterim, clearInterim, getSpeakerMapping, replaceEntries, reset, saveToServer]);
 }

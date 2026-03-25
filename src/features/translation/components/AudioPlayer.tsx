@@ -18,7 +18,17 @@ function formatTime(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
-const AUDIO_MIME_TYPES = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', ''];
+const AUDIO_MIME_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/ogg',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/mp4',
+  'audio/aac',
+  'audio/flac',
+  '',
+];
 
 export function AudioPlayer({ meetingId, dataKey, onTimeUpdate, seekRef }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);

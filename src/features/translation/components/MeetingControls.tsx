@@ -11,6 +11,7 @@ interface MeetingControlsProps {
   isEnded: boolean;
   connectionState: 'disconnected' | 'connecting' | 'connected' | 'error';
   onStart: () => void;
+  onImport: () => void;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -27,6 +28,7 @@ export function MeetingControls({
   isEnded,
   connectionState,
   onStart,
+  onImport,
   onPause,
   onResume,
   onStop,
@@ -56,19 +58,31 @@ export function MeetingControls({
       )}
 
       {!isActive ? (
-        /* Start button */
-        <Button
-          onClick={() => setShowStartConfirm(true)}
-          disabled={isConnecting}
-          className="gap-2 rounded-xl bg-vietnamese hover:bg-vietnamese/90"
-        >
-          {isConnecting ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Mic className="h-4 w-4" />
-          )}
-          {t.meeting.startMeeting}
-        </Button>
+        <>
+          {/* Start button */}
+          <Button
+            onClick={() => setShowStartConfirm(true)}
+            disabled={isConnecting}
+            className="gap-2 rounded-xl bg-vietnamese hover:bg-vietnamese/90"
+          >
+            {isConnecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mic className="h-4 w-4" />
+            )}
+            {t.meeting.startMeeting}
+          </Button>
+
+          {/* Import button */}
+          <Button
+            onClick={onImport}
+            disabled={isConnecting}
+            variant="outline"
+            className="rounded-xl"
+          >
+            {t.meeting.importMeeting ?? 'Import'}
+          </Button>
+        </>
       ) : (
         <>
           {/* Pause / Resume */}

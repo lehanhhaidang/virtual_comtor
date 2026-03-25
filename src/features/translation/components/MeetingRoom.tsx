@@ -13,8 +13,11 @@ import { TranscriptPanel } from './TranscriptPanel';
 import { MeetingControls } from './MeetingControls';
 import { MeetingSummary } from './MeetingSummary';
 import { AudioPlayer } from './AudioPlayer';
+import { ImportMeetingDialog } from './ImportMeetingDialog';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
 import { useAuth } from '@/features/auth/hooks/useAuth';
+import * as XLSX from 'xlsx';
+import type { TranscriptEntry } from '@/types/transcript.types';
 
 interface MeetingRoomProps {
   meetingId: string;
@@ -43,6 +46,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   const [isEnded, setIsEnded] = useState(false);
   const [dataKeyRef, setDataKeyRef] = useState<CryptoKey | null>(null);
   const [error, setError] = useState('');
+  const [showImport, setShowImport] = useState(false);
   // Audio playback sync (post-meeting)
   const [currentMs, setCurrentMs] = useState(0);
   const seekToRef = useRef<((ms: number) => void) | null>(null);
@@ -64,13 +68,97 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
     error: t.common.error,
   }), [t]);
 
+  const uploadEncryptedAudioChunked = useCallback(async (bytes: Uint8Array) => {
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+    let offset = 0;
+    while (offset < bytes.length) {
+      const end = Math.min(bytes.length, offset + CHUNK_SIZE);
+      const chunk = bytes.slice(offset, end);
+      const isFinal = end >= bytes.length;
+
+      const res = await fetch(`/api/meetings/${meetingId}/audio/chunk`, {
+        method: 'POST',
+        headers: {
+          'x-upload-offset': String(offset),
+          'x-upload-final': isFinal ? '1' : '0',
+        },
+        body: chunk,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Audio upload failed (${res.status}) ${text}`);
+      }
+      offset = end;
+    }
+  }, [meetingId]);
+
+  const encryptAudioToBytes = useCallback(async (blob: Blob, dataKey: CryptoKey) => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, dataKey, arrayBuffer);
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    return combined;
+  }, []);
+
+  const parseImportedXlsx = useCallback((buffer: ArrayBuffer): TranscriptEntry[] => {
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+
+    const parseTimeToMs = (value: unknown): number => {
+      if (typeof value !== 'string') return 0;
+      const parts = value.split(':').map((p) => Number(p));
+      if (parts.some((n) => Number.isNaN(n))) return 0;
+      if (parts.length === 2) {
+        const [m, s] = parts;
+        return ((m * 60 + s) * 1000) | 0;
+      }
+      if (parts.length === 3) {
+        const [h, m, s] = parts;
+        return ((h * 3600 + m * 60 + s) * 1000) | 0;
+      }
+      return 0;
+    };
+
+    let idCounter = 0;
+    return rows
+      .map((r) => {
+        const startMs = parseTimeToMs(r.Time);
+        const speakerLabel = String(r.Speaker ?? '').trim() || 'Speaker';
+        const languageRaw = String(r.Language ?? 'ja').trim();
+        const language = languageRaw === 'vi' ? 'vi' : 'ja';
+        const originalText = String(r.Original ?? '').trim();
+        const translatedText = String(r.Translation ?? '').trim();
+        if (!originalText && !translatedText) return null;
+        const entry: TranscriptEntry = {
+          id: `import-${++idCounter}`,
+          meetingId,
+          speakerId: speakerLabel,
+          speakerLabel,
+          speakerNumber: 0,
+          language,
+          originalText,
+          translatedText,
+          startMs,
+          endMs: startMs,
+          confidence: 0.9,
+          isReply: false,
+          createdAt: new Date().toISOString(),
+        };
+        return entry;
+      })
+      .filter((x): x is TranscriptEntry => Boolean(x));
+  }, [meetingId]);
+
   /**
    * Start meeting — update status in DB and begin transcription.
    */
   const handleStart = useCallback(async () => {
     setError('');
     setIsActive(true);
-    // Meeting is already in_progress from project page — just start STT
     await soniox.start();
   }, [soniox]);
 
@@ -115,27 +203,12 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         // Save transcript (encrypted)
         await transcript.saveToServer(() => Promise.resolve(dataKey));
 
-        // Wait for MediaRecorder.onstop to fire and blob to finalize (reliable, no polling)
+        // Wait for MediaRecorder.onstop to fire and blob to finalize
         const blob = await waitForBlob();
 
         if (blob && blob.size > 0) {
-          // Encrypt audio blob
-          const arrayBuffer = await blob.arrayBuffer();
-          const iv = crypto.getRandomValues(new Uint8Array(12));
-          const encrypted = await crypto.subtle.encrypt(
-            { name: 'AES-GCM', iv },
-            dataKey,
-            arrayBuffer
-          );
-          const combined = new Uint8Array(iv.length + encrypted.byteLength);
-          combined.set(iv, 0);
-          combined.set(new Uint8Array(encrypted), iv.length);
-
-          // Upload encrypted blob
-          await fetch(`/api/meetings/${meetingId}/audio`, {
-            method: 'POST',
-            body: combined,
-          });
+          const combined = await encryptAudioToBytes(blob, dataKey);
+          await uploadEncryptedAudioChunked(combined);
         }
       } catch {
         setError('Failed to save meeting data.');
@@ -194,6 +267,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
           isEnded={isEnded}
           connectionState={soniox.state}
           onStart={handleStart}
+          onImport={() => setShowImport(true)}
           onPause={handlePause}
           onResume={handleResume}
           onStop={handleStop}
@@ -207,6 +281,45 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
           {error}
         </div>
       )}
+
+      <ImportMeetingDialog
+        open={showImport}
+        onClose={() => setShowImport(false)}
+        onImport={async ({ audioFile, xlsxArrayBuffer }) => {
+          setError('');
+          if (isActive) throw new Error('Meeting is active');
+
+          const dataKey = await getDataKey();
+          if (!dataKey) throw new Error('Encryption key not available');
+          setDataKeyRef(dataKey);
+
+          // 1) If XLSX provided: import transcript directly
+          if (xlsxArrayBuffer) {
+            const imported = parseImportedXlsx(xlsxArrayBuffer);
+            transcript.replaceEntries(imported);
+            await transcript.saveToServer(() => Promise.resolve(dataKey));
+          }
+
+          // 2) Upload audio (if any)
+          if (audioFile) {
+            const combined = await encryptAudioToBytes(audioFile, dataKey);
+            await uploadEncryptedAudioChunked(combined);
+          }
+
+          // 3) If only audio (no XLSX): run Soniox to re-transcribe
+          if (audioFile && !xlsxArrayBuffer) {
+            setIsActive(true);
+            await soniox.startFromFile(audioFile);
+            setIsActive(false);
+
+            transcript.clearInterim();
+            await transcript.saveToServer(() => Promise.resolve(dataKey));
+          }
+
+          await meetingApi.update(meetingId, { status: 'completed' });
+          setIsEnded(true);
+        }}
+      />
 
       {/* Export/Recording toolbar */}
       {(isActive || hasRecording || transcript.entries.length > 0) && (
