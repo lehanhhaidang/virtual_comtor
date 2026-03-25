@@ -4,6 +4,8 @@ import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { SONIOX_CONFIG, SONIOX_WS_URL, type SonioxLanguage } from '@/lib/soniox';
 import type { SonioxResponse } from '@/types/transcript.types';
 
+// ---------------------------------------------------------------------------
+
 interface UseSonioxRealtimeOptions {
   onFinalTokens: (
     speakerId: string,
@@ -12,7 +14,7 @@ interface UseSonioxRealtimeOptions {
     translatedText: string,
     startMs: number,
     endMs: number,
-    confidence: number
+    confidence: number,
   ) => void;
   onInterimTokens: (text: string, speakerId: string, language: SonioxLanguage) => void;
   onTranslationOnly: (translatedText: string) => void;
@@ -21,9 +23,15 @@ interface UseSonioxRealtimeOptions {
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
+// ---------------------------------------------------------------------------
+
 /**
- * useSonioxRealtime — WebSocket connection to Soniox for real-time STT.
- * Handles: mic access, audio streaming, response parsing, speaker/language extraction.
+ * useSonioxRealtime — WebSocket lifecycle for Soniox real-time STT + translation.
+ *
+ * Features:
+ *   - Live mic streaming with auto-reconnect on unexpected WS close
+ *   - File-based streaming (for import re-transcription)
+ *   - Temp key TTL: 4h (renewed on each connect)
  */
 export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
   const optionsRef = useRef(options);
@@ -31,20 +39,24 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
 
   const [state, setState] = useState<ConnectionState>('disconnected');
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const contextRef = useRef<AudioContext | null>(null);
 
-  /**
-   * Get temporary API key from our server.
-   */
+  const wsRef        = useRef<WebSocket | null>(null);
+  const streamRef    = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const contextRef   = useRef<AudioContext | null>(null);
+
+  // Tracks whether we should be live (used to gate auto-reconnect)
+  const isLiveRef          = useRef(false);
+  const reconnectTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
   const getTempKey = useCallback(async (): Promise<string | null> => {
     try {
       const res = await fetch('/api/soniox/temp-key', { method: 'POST' });
       if (!res.ok) {
-        const text = await res.text();
-        console.error('[Soniox] Temp key error:', res.status, text);
         optionsRef.current.onError(`Soniox key failed: ${res.status}`);
         return null;
       }
@@ -59,135 +71,6 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
     }
   }, []);
 
-  /**
-   * Parse Soniox response: group tokens by speaker, extract final/interim.
-   */
-  const handleMessage = useCallback(
-    (event: MessageEvent) => {
-      try {
-        const response: SonioxResponse = JSON.parse(event.data);
-
-        if (!response.tokens?.length) {
-          return;
-        }
-
-        // Check if this is a translation-only message (all tokens are translations)
-        // This happens when Soniox sends translations in a separate WS message
-        const allTranslation = response.tokens.every(
-          (t) => t.translation_status === 'translation'
-        );
-        if (allTranslation) {
-          const translatedText = response.tokens.map((t) => t.text).join('').trim();
-          if (translatedText) {
-            optionsRef.current.onTranslationOnly(translatedText);
-          }
-          return;
-        }
-
-        // Soniox sends tokens as: [original...] [translation...] [original...] [translation...]
-        // Original tokens have: translation_status = "original" or "none", speaker, language
-        // Translation tokens have: translation_status = "translation", source_language, language (of translation)
-        // Group: collect originals → attach following translations to that group
-
-        let currentOriginal: {
-          speakerId: string;
-          language: SonioxLanguage;
-          texts: string[];
-          startMs: number;
-          endMs: number;
-          isFinal: boolean;
-          totalConfidence: number;
-          confidenceCount: number;
-        } | null = null;
-
-        let translationTexts: string[] = [];
-
-        const flush = () => {
-          if (!currentOriginal) return;
-
-          const originalText = currentOriginal.texts.join('').trim();
-          const translatedText = translationTexts.join('').trim();
-
-          if (!originalText) {
-            currentOriginal = null;
-            translationTexts = [];
-            return;
-          }
-
-          const avgConfidence =
-            currentOriginal.confidenceCount > 0
-              ? currentOriginal.totalConfidence / currentOriginal.confidenceCount
-              : 0.5;
-
-          if (currentOriginal.isFinal) {
-            optionsRef.current.onFinalTokens(
-              currentOriginal.speakerId,
-              currentOriginal.language,
-              originalText,
-              translatedText,
-              currentOriginal.startMs,
-              currentOriginal.endMs,
-              avgConfidence
-            );
-          } else {
-            optionsRef.current.onInterimTokens(originalText, currentOriginal.speakerId, currentOriginal.language);
-          }
-
-          currentOriginal = null;
-          translationTexts = [];
-        };
-
-        for (const token of response.tokens) {
-          const status = token.translation_status || 'none';
-
-          if (status === 'translation') {
-            // Translation token — attach to current original group
-            translationTexts.push(token.text);
-          } else {
-            // Original or none — this is a source token
-            // If we encounter a new original and there's a pending group, flush it
-            const speakerId = token.speaker || '0';
-            const rawLang = token.language || 'ja';
-            const language: SonioxLanguage = rawLang === 'vi' ? 'vi' : 'ja';
-
-            if (currentOriginal && currentOriginal.speakerId !== speakerId) {
-              // Speaker changed — flush previous group
-              flush();
-            }
-
-            if (!currentOriginal) {
-              currentOriginal = {
-                speakerId,
-                language,
-                texts: [],
-                startMs: token.start_ms || 0,
-                endMs: token.end_ms || 0,
-                isFinal: false,
-                totalConfidence: 0,
-                confidenceCount: 0,
-              };
-            }
-
-            currentOriginal.texts.push(token.text);
-            if (token.end_ms) currentOriginal.endMs = token.end_ms;
-            if (token.is_final) currentOriginal.isFinal = true;
-            if (token.confidence) {
-              currentOriginal.totalConfidence += token.confidence;
-              currentOriginal.confidenceCount++;
-            }
-          }
-        }
-
-        // Flush last group
-        flush();
-
-      } catch (err) {
-        console.error('[Soniox] Parse error:', err, 'Raw:', String(event.data).slice(0, 300));
-      }
-    },
-    []
-  );
-
   const sendPcmAsInt16 = useCallback((ws: WebSocket, float32: Float32Array) => {
     if (ws.readyState !== WebSocket.OPEN) return;
     const int16 = new Int16Array(float32.length);
@@ -198,13 +81,92 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
     ws.send(int16.buffer);
   }, []);
 
-  const connect = useCallback(async (tempKey: string, sampleRate: number) => {
+  /** Parse Soniox token stream and fire callbacks. */
+  const handleMessage = useCallback((event: MessageEvent) => {
+    try {
+      const response: SonioxResponse = JSON.parse(event.data);
+      if (!response.tokens?.length) return;
+
+      // Translation-only message (separate WS frame from Soniox)
+      if (response.tokens.every((t) => t.translation_status === 'translation')) {
+        const text = response.tokens.map((t) => t.text).join('').trim();
+        if (text) optionsRef.current.onTranslationOnly(text);
+        return;
+      }
+
+      type TokenGroup = {
+        speakerId: string;
+        language: SonioxLanguage;
+        texts: string[];
+        startMs: number;
+        endMs: number;
+        isFinal: boolean;
+        totalConfidence: number;
+        confidenceCount: number;
+      };
+
+      let group: TokenGroup | null = null;
+      let translationTexts: string[] = [];
+
+      const flush = () => {
+        if (!group) return;
+        const originalText = group.texts.join('').trim();
+        const translatedText = translationTexts.join('').trim();
+        if (originalText) {
+          const avgConf = group.confidenceCount > 0
+            ? group.totalConfidence / group.confidenceCount
+            : 0.5;
+          if (group.isFinal) {
+            optionsRef.current.onFinalTokens(
+              group.speakerId, group.language,
+              originalText, translatedText,
+              group.startMs, group.endMs, avgConf,
+            );
+          } else {
+            optionsRef.current.onInterimTokens(originalText, group.speakerId, group.language);
+          }
+        }
+        group = null;
+        translationTexts = [];
+      };
+
+      for (const token of response.tokens) {
+        const status = token.translation_status || 'none';
+        if (status === 'translation') {
+          translationTexts.push(token.text);
+          continue;
+        }
+
+        const speakerId = token.speaker || '0';
+        const language: SonioxLanguage = (token.language || 'ja') === 'vi' ? 'vi' : 'ja';
+
+        if (group && group.speakerId !== speakerId) flush();
+
+        if (!group) {
+          group = { speakerId, language, texts: [], startMs: token.start_ms || 0, endMs: token.end_ms || 0, isFinal: false, totalConfidence: 0, confidenceCount: 0 };
+        }
+        group.texts.push(token.text);
+        if (token.end_ms) group.endMs = token.end_ms;
+        if (token.is_final) group.isFinal = true;
+        if (token.confidence) { group.totalConfidence += token.confidence; group.confidenceCount++; }
+      }
+      flush();
+    } catch (err) {
+      console.error('[Soniox] Parse error:', err, 'Raw:', String(event.data).slice(0, 300));
+    }
+  }, []);
+
+  /**
+   * Open a Soniox WebSocket and send the config frame.
+   * Returns the WebSocket (in OPEN state with config sent).
+   */
+  const openWebSocket = useCallback(async (tempKey: string, sampleRate: number): Promise<WebSocket> => {
     const ws = new WebSocket(SONIOX_WS_URL);
     wsRef.current = ws;
 
     await new Promise<void>((resolve, reject) => {
       ws.onopen = () => {
-        const config = {
+        ws.send(JSON.stringify({
           api_key: tempKey,
           model: SONIOX_CONFIG.model,
           audio_format: 'pcm_s16le',
@@ -218,94 +180,110 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
             language_a: SONIOX_CONFIG.translation.language_a,
             language_b: SONIOX_CONFIG.translation.language_b,
           },
-        };
-        ws.send(JSON.stringify(config));
-        setState('connected');
+        }));
         resolve();
       };
       ws.onerror = () => reject(new Error('WebSocket connection error'));
     });
 
     ws.onmessage = handleMessage;
-    ws.onclose = () => setState('disconnected');
-
     return ws;
   }, [handleMessage]);
 
+  /** Tear down audio graph + WS, without touching isLiveRef. */
+  const teardown = useCallback(() => {
+    processorRef.current?.disconnect();
+    contextRef.current?.close().catch(() => {});
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    wsRef.current?.close();
+    processorRef.current = null;
+    contextRef.current = null;
+    streamRef.current = null;
+    wsRef.current = null;
+  }, []);
+
   /**
-   * Start real-time transcription from microphone.
+   * Wire mic stream → AudioContext → ScriptProcessor → Soniox WS.
+   * Sets up auto-reconnect on unexpected WS close.
    */
+  const connectMic = useCallback(async (micStream: MediaStream) => {
+    const tempKey = await getTempKey();
+    if (!tempKey) { setState('error'); return; }
+
+    setState('connecting');
+    const audioContext = new AudioContext();
+    contextRef.current = audioContext;
+
+    const ws = await openWebSocket(tempKey, audioContext.sampleRate);
+    setState('connected');
+
+    ws.onclose = () => {
+      setState('disconnected');
+      if (isLiveRef.current) {
+        console.warn('[Soniox] WS closed unexpectedly — reconnecting in 1s…');
+        setState('connecting');
+        reconnectTimerRef.current = setTimeout(() => {
+          if (isLiveRef.current) connectMic(micStream);
+        }, 1000);
+      }
+    };
+
+    const source = audioContext.createMediaStreamSource(micStream);
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    processorRef.current = processor;
+
+    processor.onaudioprocess = (e) => {
+      sendPcmAsInt16(ws, e.inputBuffer.getChannelData(0));
+    };
+
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+  }, [getTempKey, openWebSocket, sendPcmAsInt16]);
+
+  // ---------------------------------------------------------------------------
+  // Public API
+  // ---------------------------------------------------------------------------
+
+  /** Start live mic transcription with auto-reconnect. */
   const start = useCallback(async () => {
     setState('connecting');
+    isLiveRef.current = true;
 
     try {
-      const tempKey = await getTempKey();
-      if (!tempKey) {
-        setState('error');
-        return;
-      }
-
       const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
       streamRef.current = micStream;
       setStream(micStream);
-
-      const audioContext = new AudioContext();
-      contextRef.current = audioContext;
-
-      const ws = await connect(tempKey, audioContext.sampleRate);
-
-      const source = audioContext.createMediaStreamSource(micStream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        sendPcmAsInt16(ws, inputData);
-      };
-
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+      await connectMic(micStream);
     } catch (err) {
+      isLiveRef.current = false;
       setState('error');
-      optionsRef.current.onError(
-        err instanceof Error ? err.message : 'Failed to start transcription'
-      );
+      optionsRef.current.onError(err instanceof Error ? err.message : 'Failed to start transcription');
     }
-  }, [connect, getTempKey, sendPcmAsInt16]);
+  }, [connectMic]);
 
   /**
-   * Start transcription from an imported audio file.
-   * Browser decodes audio → we stream PCM to Soniox over WebSocket.
+   * Stream an audio File through Soniox (for import re-transcription).
+   * Resolves when WS closes (all tokens flushed).
    */
   const startFromFile = useCallback(async (file: File): Promise<void> => {
     setState('connecting');
 
     try {
       const tempKey = await getTempKey();
-      if (!tempKey) {
-        setState('error');
-        return;
-      }
+      if (!tempKey) { setState('error'); return; }
 
-      // No mic stream in file mode
       streamRef.current = null;
       setStream(null);
 
       const audioContext = new AudioContext();
       contextRef.current = audioContext;
 
-      const arrayBuffer = await file.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      const audioBuffer = await audioContext.decodeAudioData(await file.arrayBuffer());
+      const ws = await openWebSocket(tempKey, audioContext.sampleRate);
+      setState('connected');
 
-      const ws = await connect(tempKey, audioContext.sampleRate);
-
-      // Resolve when WS closes (Soniox flush finished)
       const closed = new Promise<void>((resolve) => {
         ws.addEventListener('close', () => resolve(), { once: true });
       });
@@ -317,55 +295,38 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        sendPcmAsInt16(ws, inputData);
+        sendPcmAsInt16(ws, e.inputBuffer.getChannelData(0));
       };
 
       source.connect(processor);
       processor.connect(audioContext.destination);
-
-      // Start playback (real-time streaming)
       source.start(0);
-      source.onended = () => {
-        // Allow Soniox to flush remaining tokens, then close
-        setTimeout(() => {
-          ws.close();
-        }, 800);
-      };
+      source.onended = () => setTimeout(() => ws.close(), 800);
 
       await closed;
     } catch (err) {
       setState('error');
-      optionsRef.current.onError(
-        err instanceof Error ? err.message : 'Failed to start file transcription'
-      );
+      optionsRef.current.onError(err instanceof Error ? err.message : 'Failed to start file transcription');
     }
-  }, [connect, getTempKey, sendPcmAsInt16]);
+  }, [getTempKey, openWebSocket, sendPcmAsInt16]);
 
-  /**
-   * Stop transcription.
-   */
+  /** Stop transcription and cancel any pending reconnect. */
   const stop = useCallback(() => {
-    processorRef.current?.disconnect();
-    contextRef.current?.close();
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    wsRef.current?.close();
-
-    processorRef.current = null;
-    contextRef.current = null;
-    streamRef.current = null;
-    wsRef.current = null;
-
+    isLiveRef.current = false;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    teardown();
     setState('disconnected');
     setStream(null);
-  }, []);
+  }, [teardown]);
 
   // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stop();
-    };
-  }, [stop]);
+  useEffect(() => () => { stop(); }, [stop]);
 
-  return useMemo(() => ({ state, start, startFromFile, stop, stream }), [state, start, startFromFile, stop, stream]);
+  return useMemo(
+    () => ({ state, start, startFromFile, stop, stream }),
+    [state, start, startFromFile, stop, stream],
+  );
 }

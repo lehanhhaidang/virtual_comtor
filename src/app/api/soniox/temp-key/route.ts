@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         usage_type: 'transcribe_websocket',
-        expires_in_seconds: 3600,
+        expires_in_seconds: 14400, // 4 hours
       }),
     });
 
