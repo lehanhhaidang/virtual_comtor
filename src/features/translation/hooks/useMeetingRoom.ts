@@ -128,15 +128,33 @@ export function useMeetingRoom({
       }
       setDataKey(key);
 
-      await transcript.saveToServer(() => Promise.resolve(key));
-
-      const blob = await waitForBlob();
-      if (blob && blob.size > 0) {
-        const encrypted = await encryptAudio(blob, key);
-        await uploadAudioChunked(meetingId, encrypted);
+      // Save transcript (non-fatal if fails)
+      try {
+        const saved = await transcript.saveToServer(() => Promise.resolve(key));
+        console.info('[MeetingRoom] transcript saved:', saved, 'entries');
+      } catch (err) {
+        console.error('[MeetingRoom] transcript save failed:', err);
+        setError(`Failed to save transcript: ${err instanceof Error ? err.message : String(err)}`);
       }
-    } catch {
-      setError('Failed to save meeting data.');
+
+      // Upload audio (non-fatal if fails)
+      try {
+        const blob = await waitForBlob();
+        if (blob && blob.size > 0) {
+          console.info('[MeetingRoom] uploading audio blob:', blob.size, 'bytes');
+          const encrypted = await encryptAudio(blob, key);
+          await uploadAudioChunked(meetingId, encrypted);
+          console.info('[MeetingRoom] audio upload done');
+        } else {
+          console.info('[MeetingRoom] no audio blob to upload');
+        }
+      } catch (err) {
+        console.error('[MeetingRoom] audio upload failed:', err);
+        // Transcript already saved — don't block user
+      }
+    } catch (err) {
+      console.error('[MeetingRoom] handleStop outer error:', err);
+      setError(`Failed to save meeting data: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     await meetingApi.update(meetingId, { status: 'completed' });
