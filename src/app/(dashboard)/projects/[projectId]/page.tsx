@@ -28,6 +28,7 @@ import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/mee
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { SONIOX_LANGUAGES, LANGUAGE_PAIRS, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 
 // Chỉ hiển thị những ngôn ngữ có trong các cặp đã define
 const DEFINED_LANG_CODES = [...new Set(LANGUAGE_PAIRS.flatMap((p) => [p.langA, p.langB]))];
@@ -64,6 +65,10 @@ export default function ProjectDetailPage({
   const [langA,         setLangA]         = useState(DEFAULT_LANG_A);
   const [langB,         setLangB]         = useState(DEFAULT_LANG_B);
   const [error,         setError]         = useState('');
+
+  // Delete confirm state
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const selectedPair = `${langLabel(langA)} ↔ ${langLabel(langB)}`;
 
@@ -114,8 +119,15 @@ export default function ProjectDetailPage({
   };
 
   const handleDeleteMeeting = async (id: string) => {
-    if (!confirm('Xóa cuộc họp này?')) return;
-    await meetingApi.delete(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDeleteMeeting = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    await meetingApi.delete(deleteTarget);
+    setDeleteTarget(null);
+    setDeleting(false);
     fetchData();
   };
 
@@ -406,6 +418,15 @@ export default function ProjectDetailPage({
         )}
       </div>
 
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Xóa cuộc họp?"
+        description="Cuộc họp và toàn bộ transcript sẽ bị xóa vĩnh viễn."
+        confirmLabel="Xóa cuộc họp"
+        loading={deleting}
+        onConfirm={confirmDeleteMeeting}
+      />
     </div>
   );
 }

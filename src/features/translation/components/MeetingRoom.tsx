@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Wifi, WifiOff, AlertCircle, Loader2, Download, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useI18n } from '@/lib/i18n';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { meetingApi } from '@/features/meetings/api/meetingApi';
@@ -72,6 +73,7 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
 
   // Dialog
   const [showImport, setShowImport] = useState(false);
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Core hooks
@@ -172,10 +174,18 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
   }, [meetingId, mode, soniox, stopRecording, waitForBlob, transcript, getDataKey]);
 
   const handleBack = useCallback(() => {
-    if (isActive && !confirm(t.meeting.confirmLeave)) return;
-    if (isActive) soniox.stop();
+    if (isActive) {
+      setShowLeaveConfirm(true);
+      return;
+    }
     router.push(projectId ? `/projects/${projectId}` : '/projects');
-  }, [isActive, soniox, projectId, router, t]);
+  }, [isActive, projectId, router]);
+
+  const confirmLeave = useCallback(() => {
+    soniox.stop();
+    setShowLeaveConfirm(false);
+    router.push(projectId ? `/projects/${projectId}` : '/projects');
+  }, [soniox, projectId, router]);
 
   // ---------------------------------------------------------------------------
   // Derived
@@ -326,6 +336,15 @@ export function MeetingRoom({ meetingId, meetingTitle, projectId, mode = 'standa
         </span>
       </div>
 
+      <ConfirmDialog
+        open={showLeaveConfirm}
+        onOpenChange={setShowLeaveConfirm}
+        title="Rời cuộc họp?"
+        description={t.meeting.confirmLeave}
+        confirmLabel="Rời phòng"
+        variant="default"
+        onConfirm={confirmLeave}
+      />
     </div>
   );
 }

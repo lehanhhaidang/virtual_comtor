@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { useI18n } from '@/lib/i18n';
 import { projectApi, type Project, type CreateProjectData } from '@/features/projects/api/projectApi';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
@@ -27,6 +28,10 @@ export default function ProjectsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  // Delete confirm state
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Create form state
   const [name, setName] = useState('');
@@ -73,8 +78,15 @@ export default function ProjectsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Xóa dự án này? Tất cả cuộc họp sẽ bị xóa theo.')) return;
-    await projectApi.delete(id);
+    setDeleteTarget(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    await projectApi.delete(deleteTarget);
+    setDeleteTarget(null);
+    setDeleting(false);
     fetchProjects();
   };
 
@@ -219,6 +231,16 @@ export default function ProjectsPage() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Xóa dự án?"
+        description="Tất cả cuộc họp trong dự án này sẽ bị xóa theo. Hành động này không thể hoàn tác."
+        confirmLabel="Xóa dự án"
+        loading={deleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
