@@ -29,6 +29,14 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { SONIOX_LANGUAGES, LANGUAGE_PAIRS, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogBody,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 // Chỉ hiển thị những ngôn ngữ có trong các cặp đã define
 const DEFINED_LANG_CODES = [...new Set(LANGUAGE_PAIRS.flatMap((p) => [p.langA, p.langB]))];
@@ -178,160 +186,143 @@ export default function ProjectDetailPage({
         </div>
       </div>
 
-      {/* ── Create meeting modal overlay ── */}
-      {showCreate && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center">
-          <div className="w-full max-w-lg overflow-hidden rounded-t-3xl border border-border/60 bg-card shadow-2xl sm:rounded-3xl">
+      {/* ── Create meeting dialog ── */}
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!open) handleCloseCreate(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t.dashboard.newMeeting}</DialogTitle>
+          </DialogHeader>
 
-            {/* Modal header */}
-            <div className="flex items-center justify-between border-b border-border/40 px-6 py-4">
-              <h2 className="text-base font-semibold">{t.dashboard.newMeeting}</h2>
-              <button
-                onClick={handleCloseCreate}
-                className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
+          <DialogBody className="space-y-6 py-4">
+            {/* Error */}
+            {error && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {error}
+              </div>
+            )}
+
+            {/* Title */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">{t.dashboard.meetingTitle} *</Label>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Cuộc họp Sprint Review..."
+                className="h-11 rounded-xl"
+                autoFocus
+                onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              />
             </div>
 
-            <div className="space-y-6 px-6 py-5">
-
-              {/* Error */}
-              {error && (
-                <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
-
-              {/* Title */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">{t.dashboard.meetingTitle} *</Label>
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Cuộc họp Sprint Review..."
-                  className="h-11 rounded-xl"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-                />
-              </div>
-
-              {/* Language pair — 2 dropdowns */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Languages className="h-4 w-4 text-muted-foreground" />
-                  <Label className="text-sm font-medium">Cặp ngôn ngữ</Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  {/* Lang A */}
-                  <Select value={langA} onValueChange={setLangA}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEFINED_LANGUAGES.map((l) => (
-                        <SelectItem key={l.code} value={l.code} disabled={l.code === langB}>
-                          {l.flag ? `${l.flag} ` : ''}{l.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  {/* Swap button */}
-                  <button
-                    type="button"
-                    title="Swap languages"
-                    onClick={() => { setLangA(langB); setLangB(langA); }}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    ⇄
-                  </button>
-
-                  {/* Lang B */}
-                  <Select value={langB} onValueChange={setLangB}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEFINED_LANGUAGES.map((l) => (
-                        <SelectItem key={l.code} value={l.code} disabled={l.code === langA}>
-                          {l.flag ? `${l.flag} ` : ''}{l.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Mode */}
-              <div className="space-y-3">
-                <Label className="text-sm font-medium">Chế độ</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {([
-                    {
-                      id: 'standard',
-                      icon: BarChart3,
-                      title: t.meeting.modeStandard ?? 'Standard',
-                      desc: t.meeting.modeStandardDesc ?? 'Transcript được mã hoá & lưu lại',
-                    },
-                    {
-                      id: 'private',
-                      icon: Shield,
-                      title: t.meeting.modePrivate ?? 'Private',
-                      desc: t.meeting.modePrivateDesc ?? 'Không lưu dữ liệu sau cuộc họp',
-                    },
-                  ] as const).map(({ id, icon: Icon, title: mTitle, desc }) => {
-                    const isSelected = mode === id;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setMode(id)}
-                        className={`flex flex-col items-start gap-1.5 rounded-2xl border px-4 py-3 text-left transition-all ${
-                          isSelected
-                            ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
-                            : 'border-border/50 bg-card/60 text-muted-foreground hover:border-border hover:bg-accent/50 hover:text-foreground'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 text-sm font-medium">
-                          <Icon className="h-4 w-4" />
-                          {mTitle}
-                        </span>
-                        <span className="text-xs leading-snug text-muted-foreground">{desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between border-t border-border/40 px-6 py-4">
-              {/* Selection summary */}
-              <p className="text-xs text-muted-foreground">
-                {selectedPair}
-                <span className="mx-1.5 opacity-40">·</span>
-                {mode === 'standard' ? '📊 Standard' : '🔒 Private'}
-              </p>
-
+            {/* Language pair */}
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={handleCloseCreate} className="rounded-xl">
-                  {t.common.cancel}
-                </Button>
+                <Languages className="h-4 w-4 text-muted-foreground" />
+                <Label className="text-sm font-medium">Cặp ngôn ngữ</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <Select value={langA} onValueChange={setLangA}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEFINED_LANGUAGES.map((l) => (
+                      <SelectItem key={l.code} value={l.code} disabled={l.code === langB}>
+                        {l.flag ? `${l.flag} ` : ''}{l.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
                 <Button
-                  onClick={handleCreate}
-                  disabled={creating || !title.trim()}
-                  className="gap-2 rounded-xl"
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Swap languages"
+                  onClick={() => { setLangA(langB); setLangB(langA); }}
+                  className="h-9 w-9 shrink-0 rounded-xl"
                 >
-                  {creating && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {t.common.create}
+                  ⇄
                 </Button>
+
+                <Select value={langB} onValueChange={setLangB}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEFINED_LANGUAGES.map((l) => (
+                      <SelectItem key={l.code} value={l.code} disabled={l.code === langA}>
+                        {l.flag ? `${l.flag} ` : ''}{l.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
-          </div>
-        </div>
-      )}
+            {/* Mode */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Chế độ</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  {
+                    id: 'standard',
+                    icon: BarChart3,
+                    title: t.meeting.modeStandard ?? 'Standard',
+                    desc: t.meeting.modeStandardDesc ?? 'Transcript được mã hoá & lưu lại',
+                  },
+                  {
+                    id: 'private',
+                    icon: Shield,
+                    title: t.meeting.modePrivate ?? 'Private',
+                    desc: t.meeting.modePrivateDesc ?? 'Không lưu dữ liệu sau cuộc họp',
+                  },
+                ] as const).map(({ id, icon: Icon, title: mTitle, desc }) => {
+                  const isSelected = mode === id;
+                  return (
+                    <Button
+                      key={id}
+                      type="button"
+                      variant="outline"
+                      onClick={() => setMode(id)}
+                      className={`h-auto w-full flex-col items-start gap-1.5 rounded-2xl px-4 py-3 text-left transition-all ${
+                        isSelected
+                          ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
+                          : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2 text-sm font-medium">
+                        <Icon className="h-4 w-4" />
+                        {mTitle}
+                      </span>
+                      <span className="text-xs leading-snug text-muted-foreground">{desc}</span>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          </DialogBody>
+
+          <DialogFooter>
+            <p className="mr-auto text-xs text-muted-foreground">
+              {selectedPair}
+              <span className="mx-1.5 opacity-40">·</span>
+              {mode === 'standard' ? '📊 Standard' : '🔒 Private'}
+            </p>
+            <Button variant="ghost" onClick={handleCloseCreate} className="rounded-xl">
+              {t.common.cancel}
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={creating || !title.trim()}
+              className="gap-2 rounded-xl"
+            >
+              {creating && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t.common.create}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Meetings list ── */}
       <div>

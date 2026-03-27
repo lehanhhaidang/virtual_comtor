@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Slider } from '@/components/ui/slider';
 
 interface AudioPlayerProps {
   meetingId: string;
@@ -32,7 +33,6 @@ const AUDIO_MIME_TYPES = [
 
 export function AudioPlayer({ meetingId, dataKey, onTimeUpdate, seekRef }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
-  const seekBarRef = useRef<HTMLInputElement>(null);
   const blobUrlRef = useRef<string | null>(null);
   const isDraggingRef = useRef(false);
 
@@ -108,13 +108,6 @@ export function AudioPlayer({ meetingId, dataKey, onTimeUpdate, seekRef }: Audio
     return () => { cancelled = true; };
   }, [meetingId, dataKey]);
 
-  // Sync seek bar max attribute when duration becomes known
-  useEffect(() => {
-    if (seekBarRef.current && durationMs > 0) {
-      seekBarRef.current.max = String(durationMs);
-    }
-  }, [durationMs]);
-
   // Revoke blob URL on unmount
   useEffect(() => {
     return () => {
@@ -166,7 +159,6 @@ export function AudioPlayer({ meetingId, dataKey, onTimeUpdate, seekRef }: Audio
             if (isDraggingRef.current) return;
             const ms = (e.currentTarget.currentTime * 1000) | 0;
             setCurrentMs(ms);
-            if (seekBarRef.current) seekBarRef.current.value = String(ms);
             onTimeUpdate?.(ms);
           }}
           onDurationChange={(e) => {
@@ -204,38 +196,27 @@ export function AudioPlayer({ meetingId, dataKey, onTimeUpdate, seekRef }: Audio
           )}
         </Button>
 
-        {/* Seek bar — uncontrolled, updated via DOM ref for perf */}
+        {/* Seek bar — shadcn Slider */}
         <div className="flex flex-1 items-center gap-2 min-w-0">
           <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
             {formatTime(currentMs)}
           </span>
-          <input
-            ref={seekBarRef}
-            type="range"
+          <Slider
+            className="flex-1"
             min={0}
             max={durationMs || 1}
-            defaultValue={0}
-            onMouseDown={() => { isDraggingRef.current = true; }}
-            onTouchStart={() => { isDraggingRef.current = true; }}
-            onChange={(e) => {
-              // Update time display while dragging
-              setCurrentMs(Number(e.target.value));
+            step={100}
+            value={[currentMs]}
+            onValueChange={([val]) => {
+              isDraggingRef.current = true;
+              setCurrentMs(val);
             }}
-            onMouseUp={(e) => {
+            onValueCommit={([val]) => {
               isDraggingRef.current = false;
-              const ms = Number((e.target as HTMLInputElement).value);
               const audio = audioRef.current;
-              if (audio) audio.currentTime = ms / 1000;
-              setCurrentMs(ms);
+              if (audio) audio.currentTime = val / 1000;
+              setCurrentMs(val);
             }}
-            onTouchEnd={(e) => {
-              isDraggingRef.current = false;
-              const ms = Number((e.currentTarget as HTMLInputElement).value);
-              const audio = audioRef.current;
-              if (audio) audio.currentTime = ms / 1000;
-              setCurrentMs(ms);
-            }}
-            className="h-1.5 flex-1 cursor-pointer appearance-none rounded-full bg-border accent-primary"
           />
           <span className="w-10 shrink-0 text-xs tabular-nums text-muted-foreground">
             {durationMs > 0 ? formatTime(durationMs) : '--:--'}

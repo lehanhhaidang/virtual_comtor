@@ -5,6 +5,7 @@ import { User, Globe, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { useI18n, type Locale } from '@/lib/i18n';
 
@@ -124,21 +125,19 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex gap-3">
-          {LANGUAGES.map((lang) => (
-            <button
-              key={lang.code}
-              onClick={() => setSelectedLocale(lang.code)}
-              className={`flex flex-1 flex-col items-center gap-2 rounded-xl border py-4 px-3 text-sm transition-all ${
-                selectedLocale === lang.code
-                  ? 'border-primary bg-primary/10 text-foreground'
-                  : 'border-border/40 bg-background/40 text-muted-foreground hover:border-border hover:bg-accent/30'
-              }`}
-            >
-              <span className="text-2xl">{lang.flag}</span>
-              <span className="font-semibold text-xs">{lang.nativeLabel}</span>
-              <span className="text-xs opacity-70">{lang.label}</span>
-            </button>
-          ))}
+          <ToggleGroup
+            type="single"
+            value={selectedLocale}
+            onValueChange={(val) => { if (val) setSelectedLocale(val as Locale); }}
+          >
+            {LANGUAGES.map((lang) => (
+              <ToggleGroupItem key={lang.code} value={lang.code}>
+                <span className="text-2xl">{lang.flag}</span>
+                <span className="font-semibold text-xs">{lang.nativeLabel}</span>
+                <span className="text-xs opacity-70">{lang.label}</span>
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
         </div>
       </div>
 
