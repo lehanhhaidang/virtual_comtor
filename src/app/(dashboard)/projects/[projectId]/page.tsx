@@ -285,7 +285,7 @@ export default function ProjectDetailPage({
                       type="button"
                       variant="outline"
                       onClick={() => setMode(id)}
-                      className={`h-auto w-full flex-col items-start gap-1.5 rounded-2xl px-4 py-3 text-left transition-all ${
+                      className={`h-auto w-full flex-col items-start gap-1.5 rounded-2xl px-4 py-3 text-left whitespace-normal transition-all ${
                         isSelected
                           ? 'border-primary/60 bg-primary/10 text-foreground ring-1 ring-primary/30'
                           : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
