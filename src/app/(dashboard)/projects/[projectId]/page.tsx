@@ -26,7 +26,11 @@ import { useI18n } from '@/lib/i18n';
 import { projectApi, type Project } from '@/features/projects/api/projectApi';
 import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/meetings/api/meetingApi';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { SONIOX_LANGUAGES, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
+import { SONIOX_LANGUAGES, LANGUAGE_PAIRS, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
+
+// Chỉ hiển thị những ngôn ngữ có trong các cặp đã define
+const DEFINED_LANG_CODES = [...new Set(LANGUAGE_PAIRS.flatMap((p) => [p.langA, p.langB]))];
+const DEFINED_LANGUAGES = SONIOX_LANGUAGES.filter((l) => DEFINED_LANG_CODES.includes(l.code));
 
 // ---------------------------------------------------------------------------
 
@@ -212,7 +216,7 @@ export default function ProjectDetailPage({
                     onChange={(e) => setLangA(e.target.value)}
                     className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                   >
-                    {SONIOX_LANGUAGES.map((l) => (
+                    {DEFINED_LANGUAGES.map((l) => (
                       <option key={l.code} value={l.code} disabled={l.code === langB}>
                         {l.flag ? `${l.flag} ` : ''}{l.label}
                       </option>
@@ -235,7 +239,7 @@ export default function ProjectDetailPage({
                     onChange={(e) => setLangB(e.target.value)}
                     className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
                   >
-                    {SONIOX_LANGUAGES.map((l) => (
+                    {DEFINED_LANGUAGES.map((l) => (
                       <option key={l.code} value={l.code} disabled={l.code === langA}>
                         {l.flag ? `${l.flag} ` : ''}{l.label}
                       </option>
