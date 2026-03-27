@@ -101,7 +101,7 @@ export function useSonioxRealtime(options: UseSonioxRealtimeOptions) {
       const noneTokens = response.tokens.filter((t) => (t.translation_status || 'none') === 'none');
       if (noneTokens.length > 0) {
         const langs = [...new Set(noneTokens.map((t) => t.language || '?'))].join(', ');
-        console.debug(`[Soniox] ${noneTokens.length} token(s) not translated — detected lang: ${langs}`);
+        // tokens not translated — skip silently
       }
 
       type TokenGroup = {

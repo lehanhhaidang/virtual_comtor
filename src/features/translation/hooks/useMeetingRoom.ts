@@ -130,10 +130,8 @@ export function useMeetingRoom({
 
       // Save transcript (non-fatal if fails)
       try {
-        const saved = await transcript.saveToServer(() => Promise.resolve(key));
-        console.info('[MeetingRoom] transcript saved:', saved, 'entries');
+        await transcript.saveToServer(() => Promise.resolve(key));
       } catch (err) {
-        console.error('[MeetingRoom] transcript save failed:', err);
         setError(`Failed to save transcript: ${err instanceof Error ? err.message : String(err)}`);
       }
 
@@ -141,19 +139,13 @@ export function useMeetingRoom({
       try {
         const blob = await waitForBlob();
         if (blob && blob.size > 0) {
-          console.info('[MeetingRoom] uploading audio blob:', blob.size, 'bytes');
           const encrypted = await encryptAudio(blob, key);
           await uploadAudioChunked(meetingId, encrypted);
-          console.info('[MeetingRoom] audio upload done');
-        } else {
-          console.info('[MeetingRoom] no audio blob to upload');
         }
-      } catch (err) {
-        console.error('[MeetingRoom] audio upload failed:', err);
+      } catch {
         // Transcript already saved — don't block user
       }
     } catch (err) {
-      console.error('[MeetingRoom] handleStop outer error:', err);
       setError(`Failed to save meeting data: ${err instanceof Error ? err.message : String(err)}`);
     }
 
