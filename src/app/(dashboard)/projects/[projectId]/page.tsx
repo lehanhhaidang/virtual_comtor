@@ -27,6 +27,7 @@ import { projectApi, type Project } from '@/features/projects/api/projectApi';
 import { meetingApi, type Meeting, type CreateMeetingData } from '@/features/meetings/api/meetingApi';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { SONIOX_LANGUAGES, LANGUAGE_PAIRS, langLabel, pairId, parsePairId, DEFAULT_LANG_A, DEFAULT_LANG_B } from '@/lib/soniox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Chỉ hiển thị những ngôn ngữ có trong các cặp đã define
 const DEFINED_LANG_CODES = [...new Set(LANGUAGE_PAIRS.flatMap((p) => [p.langA, p.langB]))];
@@ -211,17 +212,18 @@ export default function ProjectDetailPage({
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Lang A */}
-                  <select
-                    value={langA}
-                    onChange={(e) => setLangA(e.target.value)}
-                    className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  >
-                    {DEFINED_LANGUAGES.map((l) => (
-                      <option key={l.code} value={l.code} disabled={l.code === langB}>
-                        {l.flag ? `${l.flag} ` : ''}{l.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={langA} onValueChange={setLangA}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEFINED_LANGUAGES.map((l) => (
+                        <SelectItem key={l.code} value={l.code} disabled={l.code === langB}>
+                          {l.flag ? `${l.flag} ` : ''}{l.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
 
                   {/* Swap button */}
                   <button
@@ -234,17 +236,18 @@ export default function ProjectDetailPage({
                   </button>
 
                   {/* Lang B */}
-                  <select
-                    value={langB}
-                    onChange={(e) => setLangB(e.target.value)}
-                    className="h-10 flex-1 rounded-xl border border-border/60 bg-card px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  >
-                    {DEFINED_LANGUAGES.map((l) => (
-                      <option key={l.code} value={l.code} disabled={l.code === langA}>
-                        {l.flag ? `${l.flag} ` : ''}{l.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={langB} onValueChange={setLangB}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEFINED_LANGUAGES.map((l) => (
+                        <SelectItem key={l.code} value={l.code} disabled={l.code === langA}>
+                          {l.flag ? `${l.flag} ` : ''}{l.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
